@@ -54,8 +54,6 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg16
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=cogni
       - POSTGRES_PASSWORD=Cogni@2026Secure
@@ -71,8 +69,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
