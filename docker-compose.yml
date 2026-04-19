@@ -72,7 +72,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "63791:6379"
+      - "63792:6379"
     volumes:
       - redisdata:/data
     healthcheck:
