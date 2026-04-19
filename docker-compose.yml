@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   web:
     build:
@@ -60,7 +58,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=cogni
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=Cogni@2026Secure
       - POSTGRES_DB=cognistack
     volumes:
       - pgdata:/var/lib/postgresql/data
