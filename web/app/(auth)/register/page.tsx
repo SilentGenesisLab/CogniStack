@@ -15,8 +15,42 @@ export default function RegisterPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [smsCode, setSmsCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+
+  const [smsSent, setSmsSent] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  const sendSms = async () => {
+    if (!phone) { setError("请先填写手机号"); return; }
+    setSmsLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error); return; }
+      setSmsSent(true);
+      // 60s countdown
+      setCountdown(60);
+      const timer = setInterval(() => {
+        setCountdown((c) => {
+          if (c <= 1) { clearInterval(timer); setSmsSent(false); return 0; }
+          return c - 1;
+        });
+      }, 1000);
+    } catch {
+      setError("网络错误，请重试");
+    } finally {
+      setSmsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,13 +60,17 @@ export default function RegisterPage() {
       setError("两次输入的密码不一致");
       return;
     }
+    if (!smsCode) {
+      setError("请输入手机验证码");
+      return;
+    }
 
     setLoading(true);
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, phone, smsCode, password }),
       });
       const data = await res.json();
 
@@ -62,7 +100,7 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary px-4">
-      <Card padding="lg" className="w-full max-w-[400px]">
+      <Card padding="lg" className="w-full max-w-[420px]">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-sm bg-primary text-white font-bold">
             C
@@ -93,6 +131,44 @@ export default function RegisterPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+
+          {/* Phone + SMS */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-text-primary">
+              手机号
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="tel"
+                placeholder="请输入手机号"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                className="flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={sendSms}
+                loading={smsLoading}
+                disabled={smsSent}
+                className="flex-shrink-0 whitespace-nowrap"
+              >
+                {smsSent ? `${countdown}s 后重发` : "获取验证码"}
+              </Button>
+            </div>
+          </div>
+
+          <Input
+            label="短信验证码"
+            type="text"
+            placeholder="请输入 6 位验证码"
+            maxLength={6}
+            value={smsCode}
+            onChange={(e) => setSmsCode(e.target.value)}
+            required
+          />
+
           <Input
             label="密码"
             type="password"
@@ -110,6 +186,7 @@ export default function RegisterPage() {
             onChange={(e) => setConfirm(e.target.value)}
             required
           />
+
           <Button type="submit" className="w-full" loading={loading}>
             注册
           </Button>
