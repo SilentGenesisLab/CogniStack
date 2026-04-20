@@ -43,6 +43,7 @@ model User {
 
   decks        Deck[]
   tasks        Task[]
+  taskLists    TaskList[]
   trainingLogs TrainingLog[]
   moodLogs     MoodLog[]
 
@@ -96,24 +97,45 @@ model ReviewLog {
   @@map("review_logs")
 }
 
+model TaskList {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#3B82F6")
+  sortOrder Int      @default(0)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@index([userId])
+  @@map("task_lists")
+}
+
 model Task {
   id             String    @id @default(cuid())
   title          String
   description    String?
   userId         String
+  listId         String?
   parentId       String?
-  quadrant       Quadrant  @default(NOT_URGENT_IMPORTANT)
+  quadrant       Quadrant  @default(NOT_URGENT_NOT_IMPORTANT)
+  priority       Int       @default(0)
   dueAt          DateTime?
   completedAt    DateTime?
   pomodoroCount  Int       @default(0)
+  sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent   Task?  @relation("TaskSubtasks", fields: [parentId], references: [id])
-  subtasks Task[] @relation("TaskSubtasks")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  list     TaskList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+  parent   Task?     @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks Task[]    @relation("TaskSubtasks")
 
   @@index([userId])
+  @@index([listId])
   @@index([parentId])
   @@map("tasks")
 }
