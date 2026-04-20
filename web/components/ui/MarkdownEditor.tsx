@@ -49,7 +49,7 @@ export function MarkdownEditor({
     content,
     editorProps: {
       attributes: {
-        class: "tiptap focus:outline-none min-h-[120px]",
+        class: "focus:outline-none min-h-[120px]",
       },
     },
     onUpdate: ({ editor }) => {

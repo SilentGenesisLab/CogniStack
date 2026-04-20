@@ -968,11 +968,8 @@ function TaskDetail({
             key={descKey}
             content={task.description || ""}
             onChange={saveDesc}
-            placeholder="输入内容，支持 Markdown 快捷键：# 标题、**加粗**、- 列表..."
+            placeholder="添加描述..."
           />
-          <p className="mt-1 text-xs text-text-muted">
-            输入 # 空格 = H1 &nbsp; ## 空格 = H2 &nbsp; **文字** = 加粗 &nbsp; - 空格 = 列表
-          </p>
         </div>
       </div>
 
