@@ -25,6 +25,7 @@ export function MarkdownEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const isExternalUpdate = useRef(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -47,12 +48,6 @@ export function MarkdownEditor({
       }),
     ],
     content,
-    editorProps: {
-      attributes: {
-        class: "cogni-editor",
-        style: "color: #1F2329; outline: none; min-height: 120px;",
-      },
-    },
     onUpdate: ({ editor }) => {
       if (isExternalUpdate.current) return;
       const md = editor.storage.markdown.getMarkdown();
@@ -60,6 +55,21 @@ export function MarkdownEditor({
     },
   });
 
+  // Force text color via direct DOM manipulation after editor mounts
+  useEffect(() => {
+    if (!editor) return;
+
+    const el = editor.view.dom as HTMLElement;
+    applyColors(el);
+
+    // Watch for new nodes (e.g. when user types and new <p>/<h1> etc are created)
+    const observer = new MutationObserver(() => applyColors(el));
+    observer.observe(el, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [editor]);
+
+  // Sync content from outside
   useEffect(() => {
     if (!editor) return;
     const currentMd = editor.storage.markdown.getMarkdown();
@@ -67,122 +77,105 @@ export function MarkdownEditor({
       isExternalUpdate.current = true;
       editor.commands.setContent(content || "");
       isExternalUpdate.current = false;
+      // Re-apply colors after content change
+      requestAnimationFrame(() => applyColors(editor.view.dom as HTMLElement));
     }
   }, [editor, content]);
 
   return (
-    <>
-      <style>{editorCSS}</style>
-      <div
-        className={`rounded-sm border border-border bg-surface px-3 py-2 text-sm cursor-text ${className}`}
-        style={{ color: "#1F2329" }}
-        onClick={() => editor?.commands.focus()}
-      >
-        <EditorContent editor={editor} />
-      </div>
-    </>
+    <div
+      ref={wrapperRef}
+      className={`rounded-sm border border-border bg-surface px-3 py-2 text-sm cursor-text ${className}`}
+      onClick={() => editor?.commands.focus()}
+    >
+      <EditorContent editor={editor} />
+    </div>
   );
 }
 
-/* Inline CSS string — guaranteed to load with the component */
-const editorCSS = `
-.cogni-editor,
-.cogni-editor * {
-  color: #1F2329 !important;
-}
-.dark .cogni-editor,
-.dark .cogni-editor * {
-  color: #E8EAED !important;
-}
+/** Directly set color on the editor element and ALL its children */
+function applyColors(el: HTMLElement) {
+  const isDark = document.documentElement.classList.contains("dark");
+  const textColor = isDark ? "#E8EAED" : "#1F2329";
+  const mutedColor = isDark ? "#A1A5AB" : "#646A73";
+  const linkColor = isDark ? "#4B83F2" : "#1456F0";
+  const codeBg = isDark ? "#25282E" : "#F7F8FA";
+  const borderColor = isDark ? "#35383E" : "#E4E6EB";
 
-.cogni-editor h1 {
-  font-size: 1.25rem !important;
-  font-weight: 600 !important;
-  margin: 0.75rem 0 0.5rem !important;
-}
-.cogni-editor h2 {
-  font-size: 1.1rem !important;
-  font-weight: 600 !important;
-  margin: 0.6rem 0 0.4rem !important;
-}
-.cogni-editor h3 {
-  font-size: 1rem !important;
-  font-weight: 600 !important;
-  margin: 0.5rem 0 0.3rem !important;
-}
+  // Root element
+  el.style.color = textColor;
+  el.style.outline = "none";
+  el.style.minHeight = "120px";
 
-.cogni-editor p {
-  margin: 0.25rem 0;
-}
+  // All children
+  el.querySelectorAll("*").forEach((child) => {
+    const node = child as HTMLElement;
+    const tag = node.tagName.toLowerCase();
 
-.cogni-editor ul,
-.cogni-editor ol {
-  padding-left: 1.25rem;
-  margin: 0.25rem 0;
-}
+    if (tag === "a") {
+      node.style.color = linkColor;
+      node.style.textDecoration = "underline";
+    } else if (tag === "blockquote") {
+      node.style.color = mutedColor;
+      node.style.borderLeft = `3px solid ${borderColor}`;
+      node.style.paddingLeft = "0.75rem";
+      node.style.margin = "0.5rem 0";
+    } else if (tag === "code" && node.parentElement?.tagName.toLowerCase() !== "pre") {
+      node.style.color = textColor;
+      node.style.backgroundColor = codeBg;
+      node.style.padding = "0.1rem 0.3rem";
+      node.style.borderRadius = "4px";
+      node.style.fontSize = "0.85em";
+    } else if (tag === "pre") {
+      node.style.color = textColor;
+      node.style.backgroundColor = codeBg;
+      node.style.padding = "0.75rem";
+      node.style.borderRadius = "6px";
+      node.style.margin = "0.5rem 0";
+      node.style.overflowX = "auto";
+    } else {
+      node.style.color = textColor;
+    }
 
-.cogni-editor blockquote {
-  border-left: 3px solid #E4E6EB;
-  padding-left: 0.75rem;
-  margin: 0.5rem 0;
-}
-.cogni-editor blockquote,
-.cogni-editor blockquote * {
-  color: #646A73 !important;
-}
-.dark .cogni-editor blockquote,
-.dark .cogni-editor blockquote * {
-  color: #A1A5AB !important;
-  border-left-color: #35383E;
-}
+    // Headings
+    if (tag === "h1") {
+      node.style.fontSize = "1.25rem";
+      node.style.fontWeight = "600";
+      node.style.margin = "0.75rem 0 0.5rem";
+    } else if (tag === "h2") {
+      node.style.fontSize = "1.1rem";
+      node.style.fontWeight = "600";
+      node.style.margin = "0.6rem 0 0.4rem";
+    } else if (tag === "h3") {
+      node.style.fontSize = "1rem";
+      node.style.fontWeight = "600";
+      node.style.margin = "0.5rem 0 0.3rem";
+    }
 
-.cogni-editor code {
-  background: #F7F8FA !important;
-  padding: 0.1rem 0.3rem;
-  border-radius: 4px;
-  font-size: 0.85em;
-}
-.dark .cogni-editor code {
-  background: #25282E !important;
-}
+    // Lists
+    if (tag === "ul" || tag === "ol") {
+      node.style.paddingLeft = "1.25rem";
+      node.style.margin = "0.25rem 0";
+    }
 
-.cogni-editor pre {
-  background: #F7F8FA !important;
-  padding: 0.75rem;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 0.5rem 0;
-}
-.dark .cogni-editor pre {
-  background: #25282E !important;
-}
-.cogni-editor pre code {
-  background: none !important;
-  padding: 0;
-}
+    // Strong
+    if (tag === "strong") {
+      node.style.fontWeight = "600";
+    }
 
-.cogni-editor a {
-  color: #1456F0 !important;
-  text-decoration: underline;
-}
-.dark .cogni-editor a {
-  color: #4B83F2 !important;
-}
+    // Paragraphs
+    if (tag === "p") {
+      node.style.margin = "0.25rem 0";
+      // Placeholder
+      if (node.classList.contains("is-editor-empty") && node.parentElement === el) {
+        // Don't override placeholder color
+      }
+    }
 
-.cogni-editor hr {
-  border-color: #E4E6EB;
-  margin: 0.75rem 0;
+    // HR
+    if (tag === "hr") {
+      node.style.borderColor = borderColor;
+      node.style.margin = "0.75rem 0";
+    }
+  });
 }
-.dark .cogni-editor hr {
-  border-color: #35383E;
-}
-
-/* Placeholder */
-.cogni-editor p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  color: #8F959E !important;
-  pointer-events: none;
-  height: 0;
-}
-`;
