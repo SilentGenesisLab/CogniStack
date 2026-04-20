@@ -38,7 +38,17 @@ export async function PATCH(
     where: { id },
     data,
     include: {
-      subtasks: { orderBy: { sortOrder: "asc" } },
+      subtasks: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          subtasks: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              subtasks: { orderBy: { sortOrder: "asc" } },
+            },
+          },
+        },
+      },
       list: { select: { id: true, name: true, color: true } },
     },
   });

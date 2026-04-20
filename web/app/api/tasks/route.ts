@@ -26,6 +26,14 @@ export async function GET(req: NextRequest) {
     include: {
       subtasks: {
         orderBy: { sortOrder: "asc" },
+        include: {
+          subtasks: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              subtasks: { orderBy: { sortOrder: "asc" } },
+            },
+          },
+        },
       },
       list: { select: { id: true, name: true, color: true } },
     },
@@ -70,7 +78,17 @@ export async function POST(req: NextRequest) {
       dueAt: dueAt ? new Date(dueAt) : null,
     },
     include: {
-      subtasks: true,
+      subtasks: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          subtasks: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              subtasks: { orderBy: { sortOrder: "asc" } },
+            },
+          },
+        },
+      },
       list: { select: { id: true, name: true, color: true } },
     },
   });

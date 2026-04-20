@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownEditor } from "@/components/ui/MarkdownEditor";
 import {
   Plus,
   List,
@@ -13,7 +12,6 @@ import {
   Trash2,
   Calendar,
   X,
-  Pencil,
 } from "lucide-react";
 
 /* ---------- types ---------- */
@@ -562,18 +560,20 @@ function TaskRow({
           </span>
         )}
 
-        {/* Add subtask button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowSubInput(true);
-            setExpanded(true);
-          }}
-          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-text-muted hover:text-primary transition-all"
-          title="添加子任务"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        {/* Add subtask button (max 3 levels: depth 0, 1, 2) */}
+        {depth < 2 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSubInput(true);
+              setExpanded(true);
+            }}
+            className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-text-muted hover:text-primary transition-all"
+            title="添加子任务"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Expanded subtasks */}
@@ -747,23 +747,29 @@ function TaskDetail({
   onToggle: (t: Task) => void;
 }) {
   const [title, setTitle] = useState(task.title);
-  const [desc, setDesc] = useState(task.description || "");
-  const [editingDesc, setEditingDesc] = useState(false);
+  const [descKey, setDescKey] = useState(task.id);
   const [subTitle, setSubTitle] = useState("");
   const [showSubInput, setShowSubInput] = useState(false);
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTitle(task.title);
-    setDesc(task.description || "");
-    setEditingDesc(false);
-  }, [task.id, task.title, task.description]);
+    setDescKey(task.id);
+  }, [task.id, task.title]);
 
-  const saveField = (field: string, value: string) => {
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => {
-      onUpdate(task.id, { [field]: value });
+  const saveTitle = (value: string) => {
+    if (titleTimeout.current) clearTimeout(titleTimeout.current);
+    titleTimeout.current = setTimeout(() => {
+      onUpdate(task.id, { title: value });
     }, 500);
+  };
+
+  const saveDesc = (md: string) => {
+    if (descTimeout.current) clearTimeout(descTimeout.current);
+    descTimeout.current = setTimeout(() => {
+      onUpdate(task.id, { description: md });
+    }, 800);
   };
 
   const handleCreateSub = async () => {
@@ -782,6 +788,21 @@ function TaskDetail({
       setShowSubInput(false);
       onCreateSubtask(task.id);
     }
+  };
+
+  // Count all nested subtasks recursively
+  const countSubs = (subs: Task[]): { done: number; total: number } => {
+    let done = 0, total = 0;
+    for (const s of subs) {
+      total++;
+      if (s.completedAt) done++;
+      if (s.subtasks?.length) {
+        const nested = countSubs(s.subtasks);
+        done += nested.done;
+        total += nested.total;
+      }
+    }
+    return { done, total };
   };
 
   return (
@@ -816,7 +837,7 @@ function TaskDetail({
           value={title}
           onChange={(e) => {
             setTitle(e.target.value);
-            saveField("title", e.target.value);
+            saveTitle(e.target.value);
           }}
           className="w-full text-base font-medium text-text-primary bg-transparent border-none outline-none focus:ring-0"
         />
@@ -846,7 +867,7 @@ function TaskDetail({
           </div>
         </div>
 
-        {/* 所属清单 (moved above due date) */}
+        {/* 所属清单 */}
         <div>
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
             所属清单
@@ -882,17 +903,15 @@ function TaskDetail({
           />
         </div>
 
-        {/* Subtasks */}
+        {/* Subtasks (recursive, up to 3 levels) */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-text-muted">
               子任务
-              {task.subtasks?.length > 0 && (
-                <span className="ml-1">
-                  ({task.subtasks.filter((s) => s.completedAt).length}/
-                  {task.subtasks.length})
-                </span>
-              )}
+              {task.subtasks?.length > 0 && (() => {
+                const c = countSubs(task.subtasks);
+                return <span className="ml-1">({c.done}/{c.total})</span>;
+              })()}
             </label>
             <button
               onClick={() => setShowSubInput(true)}
@@ -904,40 +923,14 @@ function TaskDetail({
           </div>
 
           {task.subtasks?.length > 0 && (
-            <div className="space-y-1 mb-2">
-              {task.subtasks.map((sub) => (
-                <div
-                  key={sub.id}
-                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-secondary group"
-                >
-                  <button
-                    onClick={() => onToggle(sub)}
-                    className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${
-                      sub.completedAt
-                        ? "border-green-500 bg-green-500 text-white"
-                        : "border-border hover:border-primary"
-                    }`}
-                  >
-                    {sub.completedAt && <Check className="h-2.5 w-2.5" />}
-                  </button>
-                  <span
-                    className={`flex-1 text-sm ${
-                      sub.completedAt
-                        ? "line-through text-text-muted"
-                        : "text-text-primary"
-                    }`}
-                  >
-                    {sub.title}
-                  </span>
-                  <button
-                    onClick={() => onDelete(sub.id)}
-                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
+            <DetailSubtaskList
+              subtasks={task.subtasks}
+              depth={0}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              onCreateSubtask={onCreateSubtask}
+              taskListId={task.listId}
+            />
           )}
 
           {showSubInput && (
@@ -966,45 +959,20 @@ function TaskDetail({
           )}
         </div>
 
-        {/* Description with Markdown */}
+        {/* Description — live Markdown editor (Tiptap) */}
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-text-muted">描述</label>
-            <button
-              onClick={() => setEditingDesc(!editingDesc)}
-              className="text-xs text-text-muted hover:text-primary flex items-center gap-0.5"
-            >
-              <Pencil className="h-3 w-3" />
-              {editingDesc ? "预览" : "编辑"}
-            </button>
-          </div>
-
-          {editingDesc ? (
-            <textarea
-              value={desc}
-              onChange={(e) => {
-                setDesc(e.target.value);
-                saveField("description", e.target.value);
-              }}
-              placeholder="支持 Markdown 格式..."
-              rows={12}
-              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none resize-y font-mono"
-            />
-          ) : desc ? (
-            <div
-              onClick={() => setEditingDesc(true)}
-              className="rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary cursor-text min-h-[120px] prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-a:text-primary"
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{desc}</ReactMarkdown>
-            </div>
-          ) : (
-            <div
-              onClick={() => setEditingDesc(true)}
-              className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-text-muted text-center cursor-pointer hover:border-primary hover:text-primary transition-colors min-h-[120px] flex items-center justify-center"
-            >
-              点击添加描述（支持 Markdown）
-            </div>
-          )}
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">
+            描述
+          </label>
+          <MarkdownEditor
+            key={descKey}
+            content={task.description || ""}
+            onChange={saveDesc}
+            placeholder="输入内容，支持 Markdown 快捷键：# 标题、**加粗**、- 列表..."
+          />
+          <p className="mt-1 text-xs text-text-muted">
+            输入 # 空格 = H1 &nbsp; ## 空格 = H2 &nbsp; **文字** = 加粗 &nbsp; - 空格 = 列表
+          </p>
         </div>
       </div>
 
@@ -1018,6 +986,193 @@ function TaskDetail({
           删除任务
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Detail Subtask List (recursive, max 3 levels) ---------- */
+function DetailSubtaskList({
+  subtasks,
+  depth,
+  onToggle,
+  onDelete,
+  onCreateSubtask,
+  taskListId,
+}: {
+  subtasks: Task[];
+  depth: number;
+  onToggle: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onCreateSubtask: (parentId: string) => void;
+  taskListId: string | null;
+}) {
+  return (
+    <div className="space-y-0.5 mb-2">
+      {subtasks.map((sub) => (
+        <DetailSubtaskItem
+          key={sub.id}
+          sub={sub}
+          depth={depth}
+          onToggle={onToggle}
+          onDelete={onDelete}
+          onCreateSubtask={onCreateSubtask}
+          taskListId={taskListId}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DetailSubtaskItem({
+  sub,
+  depth,
+  onToggle,
+  onDelete,
+  onCreateSubtask,
+  taskListId,
+}: {
+  sub: Task;
+  depth: number;
+  onToggle: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onCreateSubtask: (parentId: string) => void;
+  taskListId: string | null;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [showInput, setShowInput] = useState(false);
+  const [title, setTitle] = useState("");
+  const hasChildren = sub.subtasks && sub.subtasks.length > 0;
+  const canAddChild = depth < 1; // depth 0 = first-level sub, depth 1 = second-level, max 3 total levels
+
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        parentId: sub.id,
+        listId: taskListId,
+      }),
+    });
+    if (res.ok) {
+      setTitle("");
+      setShowInput(false);
+      onCreateSubtask(sub.id);
+    }
+  };
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-secondary group"
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
+      >
+        {/* Expand toggle */}
+        {hasChildren ? (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-text-muted"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </button>
+        ) : (
+          <span className="w-3.5 flex-shrink-0" />
+        )}
+
+        <button
+          onClick={() => onToggle(sub)}
+          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${
+            sub.completedAt
+              ? "border-green-500 bg-green-500 text-white"
+              : "border-border hover:border-primary"
+          }`}
+        >
+          {sub.completedAt && <Check className="h-2.5 w-2.5" />}
+        </button>
+        <span
+          className={`flex-1 text-sm ${
+            sub.completedAt
+              ? "line-through text-text-muted"
+              : "text-text-primary"
+          }`}
+        >
+          {sub.title}
+        </span>
+
+        {/* Subtask count */}
+        {hasChildren && (
+          <span className="text-xs text-text-muted">
+            {sub.subtasks.filter((s) => s.completedAt).length}/{sub.subtasks.length}
+          </span>
+        )}
+
+        {/* Add child */}
+        {canAddChild && (
+          <button
+            onClick={() => {
+              setShowInput(true);
+              setExpanded(true);
+            }}
+            className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all"
+            title="添加子任务"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        )}
+
+        <button
+          onClick={() => onDelete(sub.id)}
+          className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Children */}
+      {expanded && hasChildren && (
+        <DetailSubtaskList
+          subtasks={sub.subtasks}
+          depth={depth + 1}
+          onToggle={onToggle}
+          onDelete={onDelete}
+          onCreateSubtask={onCreateSubtask}
+          taskListId={taskListId}
+        />
+      )}
+
+      {/* Inline input */}
+      {showInput && (
+        <div
+          className="flex gap-1 py-1"
+          style={{ paddingLeft: `${24 + (depth + 1) * 16}px`, paddingRight: 8 }}
+        >
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+              if (e.key === "Escape") {
+                setShowInput(false);
+                setTitle("");
+              }
+            }}
+            placeholder="子任务标题"
+            className="flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-text-primary focus:border-primary focus:outline-none"
+          />
+          <button
+            onClick={handleCreate}
+            className="rounded-sm bg-primary px-1.5 py-0.5 text-xs text-white hover:bg-primary-hover"
+          >
+            确定
+          </button>
+        </div>
+      )}
     </div>
   );
 }
