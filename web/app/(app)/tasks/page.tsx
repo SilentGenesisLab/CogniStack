@@ -1,15 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Plus,
   List,
   Grid3X3,
   Check,
+  ChevronDown,
   ChevronRight,
   Trash2,
   Calendar,
   X,
+  Pencil,
 } from "lucide-react";
 
 /* ---------- types ---------- */
@@ -84,13 +88,11 @@ export default function TasksPage() {
   const [showNewList, setShowNewList] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
-  /* fetch lists */
   const fetchLists = useCallback(async () => {
     const res = await fetch("/api/tasks/lists");
     if (res.ok) setLists(await res.json());
   }, []);
 
-  /* fetch tasks */
   const fetchTasks = useCallback(async () => {
     const params = new URLSearchParams();
     if (selectedListId) params.set("listId", selectedListId);
@@ -106,7 +108,6 @@ export default function TasksPage() {
     fetchTasks();
   }, [fetchTasks]);
 
-  /* create list */
   const createList = async () => {
     if (!newListName.trim()) return;
     const res = await fetch("/api/tasks/lists", {
@@ -121,25 +122,28 @@ export default function TasksPage() {
     }
   };
 
-  /* create task */
-  const createTask = async () => {
-    if (!newTaskTitle.trim()) return;
+  const createTask = async (parentId?: string) => {
+    const title = parentId ? undefined : newTaskTitle.trim();
+    if (!parentId && !title) return;
+
+    const body: Record<string, unknown> = {
+      title: title || "新子任务",
+      listId: selectedListId,
+    };
+    if (parentId) body.parentId = parentId;
+
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: newTaskTitle.trim(),
-        listId: selectedListId,
-      }),
+      body: JSON.stringify(body),
     });
     if (res.ok) {
-      setNewTaskTitle("");
+      if (!parentId) setNewTaskTitle("");
       fetchTasks();
       fetchLists();
     }
   };
 
-  /* toggle complete */
   const toggleComplete = async (task: Task) => {
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
@@ -147,15 +151,12 @@ export default function TasksPage() {
       body: JSON.stringify({ completed: !task.completedAt }),
     });
     if (res.ok) {
+      const updated = await res.json();
       fetchTasks();
-      if (selectedTask?.id === task.id) {
-        const updated = await res.json();
-        setSelectedTask(updated);
-      }
+      if (selectedTask?.id === task.id) setSelectedTask(updated);
     }
   };
 
-  /* update task field */
   const updateTask = async (id: string, data: Record<string, unknown>) => {
     const res = await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
@@ -169,7 +170,6 @@ export default function TasksPage() {
     }
   };
 
-  /* delete task */
   const deleteTask = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     if (selectedTask?.id === id) setSelectedTask(null);
@@ -177,7 +177,6 @@ export default function TasksPage() {
     fetchLists();
   };
 
-  /* drag-drop for quadrant */
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData("text/plain", taskId);
     e.dataTransfer.effectAllowed = "move";
@@ -205,7 +204,6 @@ export default function TasksPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
-          {/* All tasks */}
           <button
             onClick={() => setSelectedListId(null)}
             className={`flex w-full items-center justify-between px-3 py-2 text-sm transition-colors ${
@@ -221,7 +219,6 @@ export default function TasksPage() {
             <span className="text-xs text-text-muted">{allTaskCount}</span>
           </button>
 
-          {/* User lists */}
           {lists.map((list) => (
             <button
               key={list.id}
@@ -246,7 +243,6 @@ export default function TasksPage() {
           ))}
         </div>
 
-        {/* New list */}
         <div className="border-t border-border p-2">
           {showNewList ? (
             <div className="flex gap-1">
@@ -288,7 +284,6 @@ export default function TasksPage() {
 
       {/* ===== Middle: Task List ===== */}
       <div className="flex-1 flex flex-col min-w-0 bg-surface-secondary">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
           <h2 className="text-base font-semibold text-text-primary">
             {selectedListId
@@ -321,7 +316,6 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {viewMode === "list" ? (
             <ListView
@@ -330,6 +324,9 @@ export default function TasksPage() {
               onSelect={setSelectedTask}
               onToggle={toggleComplete}
               onDragStart={handleDragStart}
+              onCreateSubtask={(parentId) => createTask(parentId)}
+              onUpdateTask={updateTask}
+              onDeleteTask={deleteTask}
             />
           ) : (
             <QuadrantView
@@ -344,7 +341,6 @@ export default function TasksPage() {
           )}
         </div>
 
-        {/* New task input */}
         <div className="border-t border-border bg-surface px-4 py-3">
           <div className="flex gap-2">
             <input
@@ -355,7 +351,7 @@ export default function TasksPage() {
               className="flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
             <button
-              onClick={createTask}
+              onClick={() => createTask()}
               className="rounded-sm bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -368,9 +364,12 @@ export default function TasksPage() {
       {selectedTask && (
         <TaskDetail
           task={selectedTask}
+          lists={lists}
           onUpdate={updateTask}
           onDelete={deleteTask}
           onClose={() => setSelectedTask(null)}
+          onCreateSubtask={(parentId) => createTask(parentId)}
+          onToggle={toggleComplete}
         />
       )}
     </div>
@@ -384,12 +383,18 @@ function ListView({
   onSelect,
   onToggle,
   onDragStart,
+  onCreateSubtask,
+  onUpdateTask,
+  onDeleteTask,
 }: {
   tasks: Task[];
   selectedTask: Task | null;
   onSelect: (t: Task) => void;
   onToggle: (t: Task) => void;
   onDragStart: (e: React.DragEvent, id: string) => void;
+  onCreateSubtask: (parentId: string) => void;
+  onUpdateTask: (id: string, data: Record<string, unknown>) => void;
+  onDeleteTask: (id: string) => void;
 }) {
   if (tasks.length === 0) {
     return (
@@ -401,98 +406,223 @@ function ListView({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {tasks.map((task) => (
         <TaskRow
           key={task.id}
           task={task}
-          isSelected={selectedTask?.id === task.id}
+          depth={0}
+          selectedTask={selectedTask}
           onSelect={onSelect}
           onToggle={onToggle}
           onDragStart={onDragStart}
+          onCreateSubtask={onCreateSubtask}
+          onUpdateTask={onUpdateTask}
+          onDeleteTask={onDeleteTask}
         />
       ))}
     </div>
   );
 }
 
-/* ---------- Task Row ---------- */
+/* ---------- Task Row (recursive for subtasks) ---------- */
 function TaskRow({
   task,
-  isSelected,
+  depth,
+  selectedTask,
   onSelect,
   onToggle,
   onDragStart,
+  onCreateSubtask,
+  onUpdateTask,
+  onDeleteTask,
 }: {
   task: Task;
-  isSelected: boolean;
+  depth: number;
+  selectedTask: Task | null;
   onSelect: (t: Task) => void;
   onToggle: (t: Task) => void;
   onDragStart: (e: React.DragEvent, id: string) => void;
+  onCreateSubtask: (parentId: string) => void;
+  onUpdateTask: (id: string, data: Record<string, unknown>) => void;
+  onDeleteTask: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(true);
+  const [showSubInput, setShowSubInput] = useState(false);
+  const [subTitle, setSubTitle] = useState("");
   const meta = QUADRANT_META[task.quadrant];
+  const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+  const isSelected = selectedTask?.id === task.id;
+
+  const handleCreateSub = async () => {
+    if (!subTitle.trim()) return;
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: subTitle.trim(),
+        parentId: task.id,
+        listId: task.listId,
+      }),
+    });
+    if (res.ok) {
+      setSubTitle("");
+      setShowSubInput(false);
+      onCreateSubtask(task.id);
+    }
+  };
 
   return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, task.id)}
-      onClick={() => onSelect(task)}
-      className={`group flex items-center gap-3 rounded-sm px-3 py-2.5 cursor-pointer transition-colors ${
-        isSelected
-          ? "bg-primary-light border border-primary/20"
-          : "bg-surface border border-transparent hover:bg-surface-secondary"
-      }`}
-    >
-      {/* Checkbox */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle(task);
-        }}
-        className={`flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-          task.completedAt
-            ? "border-green-500 bg-green-500 text-white"
-            : "border-border hover:border-primary"
+    <div>
+      <div
+        draggable={depth === 0}
+        onDragStart={(e) => depth === 0 && onDragStart(e, task.id)}
+        onClick={() => onSelect(task)}
+        className={`group flex items-center gap-2 rounded-sm px-3 py-2 cursor-pointer transition-colors ${
+          isSelected
+            ? "bg-primary-light border border-primary/20"
+            : "bg-surface border border-transparent hover:bg-surface-secondary"
         }`}
+        style={{ paddingLeft: `${12 + depth * 24}px` }}
       >
-        {task.completedAt && <Check className="h-3 w-3" />}
-      </button>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm truncate ${
-            task.completedAt
-              ? "line-through text-text-muted"
-              : "text-text-primary"
+        {/* Expand/collapse toggle */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center text-text-muted transition-transform ${
+            hasSubtasks ? "visible" : "invisible"
           }`}
         >
-          {task.title}
-        </p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {task.list && (
-            <span className="text-xs text-text-muted">{task.list.name}</span>
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
           )}
-          {task.dueAt && (
-            <span className="flex items-center gap-1 text-xs text-text-muted">
-              <Calendar className="h-3 w-3" />
-              {new Date(task.dueAt).toLocaleDateString("zh-CN")}
-            </span>
+        </button>
+
+        {/* Checkbox */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(task);
+          }}
+          className={`flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+            task.completedAt
+              ? "border-green-500 bg-green-500 text-white"
+              : "border-border hover:border-primary"
+          }`}
+        >
+          {task.completedAt && <Check className="h-3 w-3" />}
+        </button>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p
+            className={`text-sm truncate ${
+              task.completedAt
+                ? "line-through text-text-muted"
+                : "text-text-primary"
+            }`}
+          >
+            {task.title}
+          </p>
+          {depth === 0 && (
+            <div className="flex items-center gap-2 mt-0.5">
+              {task.list && (
+                <span className="text-xs text-text-muted">
+                  {task.list.name}
+                </span>
+              )}
+              {task.dueAt && (
+                <span className="flex items-center gap-1 text-xs text-text-muted">
+                  <Calendar className="h-3 w-3" />
+                  {new Date(task.dueAt).toLocaleDateString("zh-CN")}
+                </span>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Subtask count */}
+        {hasSubtasks && (
+          <span className="text-xs text-text-muted">
+            {task.subtasks.filter((s) => s.completedAt).length}/
+            {task.subtasks.length}
+          </span>
+        )}
+
+        {/* Quadrant badge (top-level only) */}
+        {depth === 0 && (
+          <span
+            className={`text-xs px-1.5 py-0.5 rounded ${meta.bg} ${meta.color}`}
+          >
+            {meta.label}
+          </span>
+        )}
+
+        {/* Add subtask button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowSubInput(true);
+            setExpanded(true);
+          }}
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-text-muted hover:text-primary transition-all"
+          title="添加子任务"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      {/* Quadrant badge */}
-      <span className={`text-xs px-1.5 py-0.5 rounded ${meta.bg} ${meta.color}`}>
-        {meta.label}
-      </span>
+      {/* Expanded subtasks */}
+      {expanded && hasSubtasks && (
+        <div>
+          {task.subtasks.map((sub) => (
+            <TaskRow
+              key={sub.id}
+              task={sub}
+              depth={depth + 1}
+              selectedTask={selectedTask}
+              onSelect={onSelect}
+              onToggle={onToggle}
+              onDragStart={onDragStart}
+              onCreateSubtask={onCreateSubtask}
+              onUpdateTask={onUpdateTask}
+              onDeleteTask={onDeleteTask}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Subtask count */}
-      {task.subtasks?.length > 0 && (
-        <span className="flex items-center gap-0.5 text-xs text-text-muted">
-          <ChevronRight className="h-3 w-3" />
-          {task.subtasks.length}
-        </span>
+      {/* Inline subtask input */}
+      {showSubInput && (
+        <div
+          className="flex items-center gap-2 py-1.5 bg-surface"
+          style={{ paddingLeft: `${36 + (depth + 1) * 24}px`, paddingRight: 12 }}
+        >
+          <input
+            autoFocus
+            value={subTitle}
+            onChange={(e) => setSubTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateSub();
+              if (e.key === "Escape") {
+                setShowSubInput(false);
+                setSubTitle("");
+              }
+            }}
+            onBlur={() => {
+              if (!subTitle.trim()) {
+                setShowSubInput(false);
+                setSubTitle("");
+              }
+            }}
+            placeholder="添加子任务，Enter 确认，Esc 取消"
+            className="flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
       )}
     </div>
   );
@@ -577,6 +707,12 @@ function QuadrantView({
                   >
                     {task.title}
                   </span>
+                  {task.subtasks?.length > 0 && (
+                    <span className="text-xs text-text-muted ml-auto">
+                      {task.subtasks.filter((s) => s.completedAt).length}/
+                      {task.subtasks.length}
+                    </span>
+                  )}
                 </div>
               ))}
               {qTasks.length === 0 && (
@@ -595,24 +731,32 @@ function QuadrantView({
 /* ---------- Task Detail Panel ---------- */
 function TaskDetail({
   task,
+  lists,
   onUpdate,
   onDelete,
   onClose,
+  onCreateSubtask,
+  onToggle,
 }: {
   task: Task;
+  lists: TaskList[];
   onUpdate: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  onCreateSubtask: (parentId: string) => void;
+  onToggle: (t: Task) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description || "");
-  const titleRef = useRef<HTMLInputElement>(null);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [subTitle, setSubTitle] = useState("");
+  const [showSubInput, setShowSubInput] = useState(false);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync when task changes
   useEffect(() => {
     setTitle(task.title);
     setDesc(task.description || "");
+    setEditingDesc(false);
   }, [task.id, task.title, task.description]);
 
   const saveField = (field: string, value: string) => {
@@ -622,11 +766,41 @@ function TaskDetail({
     }, 500);
   };
 
+  const handleCreateSub = async () => {
+    if (!subTitle.trim()) return;
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: subTitle.trim(),
+        parentId: task.id,
+        listId: task.listId,
+      }),
+    });
+    if (res.ok) {
+      setSubTitle("");
+      setShowSubInput(false);
+      onCreateSubtask(task.id);
+    }
+  };
+
   return (
-    <div className="w-[320px] flex-shrink-0 border-l border-border bg-surface flex flex-col">
+    <div className="w-[360px] flex-shrink-0 border-l border-border bg-surface flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h3 className="text-sm font-semibold text-text-primary">任务详情</h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onToggle(task)}
+            className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              task.completedAt
+                ? "border-green-500 bg-green-500 text-white"
+                : "border-border hover:border-primary"
+            }`}
+          >
+            {task.completedAt && <Check className="h-3 w-3" />}
+          </button>
+          <h3 className="text-sm font-semibold text-text-primary">任务详情</h3>
+        </div>
         <button
           onClick={onClose}
           className="text-text-muted hover:text-text-primary"
@@ -639,7 +813,6 @@ function TaskDetail({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Title */}
         <input
-          ref={titleRef}
           value={title}
           onChange={(e) => {
             setTitle(e.target.value);
@@ -673,6 +846,27 @@ function TaskDetail({
           </div>
         </div>
 
+        {/* 所属清单 (moved above due date) */}
+        <div>
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">
+            所属清单
+          </label>
+          <select
+            value={task.listId || ""}
+            onChange={(e) =>
+              onUpdate(task.id, { listId: e.target.value || null })
+            }
+            className="w-full rounded-sm border border-border bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+          >
+            <option value="">无</option>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Due date */}
         <div>
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
@@ -688,38 +882,130 @@ function TaskDetail({
           />
         </div>
 
-        {/* Description */}
+        {/* Subtasks */}
         <div>
-          <label className="text-xs font-medium text-text-muted mb-1.5 block">
-            描述
-          </label>
-          <textarea
-            value={desc}
-            onChange={(e) => {
-              setDesc(e.target.value);
-              saveField("description", e.target.value);
-            }}
-            placeholder="添加任务描述..."
-            rows={5}
-            className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none resize-none"
-          />
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-text-muted">
+              子任务
+              {task.subtasks?.length > 0 && (
+                <span className="ml-1">
+                  ({task.subtasks.filter((s) => s.completedAt).length}/
+                  {task.subtasks.length})
+                </span>
+              )}
+            </label>
+            <button
+              onClick={() => setShowSubInput(true)}
+              className="text-xs text-primary hover:text-primary-hover flex items-center gap-0.5"
+            >
+              <Plus className="h-3 w-3" />
+              添加
+            </button>
+          </div>
+
+          {task.subtasks?.length > 0 && (
+            <div className="space-y-1 mb-2">
+              {task.subtasks.map((sub) => (
+                <div
+                  key={sub.id}
+                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-secondary group"
+                >
+                  <button
+                    onClick={() => onToggle(sub)}
+                    className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      sub.completedAt
+                        ? "border-green-500 bg-green-500 text-white"
+                        : "border-border hover:border-primary"
+                    }`}
+                  >
+                    {sub.completedAt && <Check className="h-2.5 w-2.5" />}
+                  </button>
+                  <span
+                    className={`flex-1 text-sm ${
+                      sub.completedAt
+                        ? "line-through text-text-muted"
+                        : "text-text-primary"
+                    }`}
+                  >
+                    {sub.title}
+                  </span>
+                  <button
+                    onClick={() => onDelete(sub.id)}
+                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showSubInput && (
+            <div className="flex gap-1">
+              <input
+                autoFocus
+                value={subTitle}
+                onChange={(e) => setSubTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateSub();
+                  if (e.key === "Escape") {
+                    setShowSubInput(false);
+                    setSubTitle("");
+                  }
+                }}
+                placeholder="子任务标题"
+                className="flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none"
+              />
+              <button
+                onClick={handleCreateSub}
+                className="rounded-sm bg-primary px-2 py-1 text-xs text-white hover:bg-primary-hover"
+              >
+                确定
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* List info */}
-        {task.list && (
-          <div>
-            <label className="text-xs font-medium text-text-muted mb-1 block">
-              所属清单
-            </label>
-            <div className="flex items-center gap-2 text-sm text-text-secondary">
-              <div
-                className="h-3 w-3 rounded-sm"
-                style={{ backgroundColor: task.list.color }}
-              />
-              {task.list.name}
-            </div>
+        {/* Description with Markdown */}
+        <div className="flex-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-medium text-text-muted">描述</label>
+            <button
+              onClick={() => setEditingDesc(!editingDesc)}
+              className="text-xs text-text-muted hover:text-primary flex items-center gap-0.5"
+            >
+              <Pencil className="h-3 w-3" />
+              {editingDesc ? "预览" : "编辑"}
+            </button>
           </div>
-        )}
+
+          {editingDesc ? (
+            <textarea
+              value={desc}
+              onChange={(e) => {
+                setDesc(e.target.value);
+                saveField("description", e.target.value);
+              }}
+              placeholder="支持 Markdown 格式..."
+              rows={12}
+              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none resize-y font-mono"
+            />
+          ) : desc ? (
+            <div
+              onClick={() => setEditingDesc(true)}
+              className="rounded-sm border border-border bg-surface px-3 py-2 text-sm text-text-primary cursor-text min-h-[120px] prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-a:text-primary"
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{desc}</ReactMarkdown>
+            </div>
+          ) : (
+            <div
+              onClick={() => setEditingDesc(true)}
+              className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-text-muted text-center cursor-pointer hover:border-primary hover:text-primary transition-colors min-h-[120px] flex items-center justify-center"
+            >
+              点击添加描述（支持 Markdown）
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
