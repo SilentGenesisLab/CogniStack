@@ -16,6 +16,98 @@ interface MarkdownEditorProps {
   className?: string;
 }
 
+/**
+ * Editor styles as a global <style> tag.
+ * Uses [data-cogni-editor] attribute selector for maximum specificity.
+ */
+const EDITOR_STYLES = `
+[data-cogni-editor][contenteditable],
+[data-cogni-editor][contenteditable] p,
+[data-cogni-editor][contenteditable] h1,
+[data-cogni-editor][contenteditable] h2,
+[data-cogni-editor][contenteditable] h3,
+[data-cogni-editor][contenteditable] li,
+[data-cogni-editor][contenteditable] ul,
+[data-cogni-editor][contenteditable] ol,
+[data-cogni-editor][contenteditable] strong,
+[data-cogni-editor][contenteditable] em,
+[data-cogni-editor][contenteditable] span {
+  color: #1F2329 !important;
+  -webkit-text-fill-color: #1F2329 !important;
+}
+
+.dark [data-cogni-editor][contenteditable],
+.dark [data-cogni-editor][contenteditable] p,
+.dark [data-cogni-editor][contenteditable] h1,
+.dark [data-cogni-editor][contenteditable] h2,
+.dark [data-cogni-editor][contenteditable] h3,
+.dark [data-cogni-editor][contenteditable] li,
+.dark [data-cogni-editor][contenteditable] ul,
+.dark [data-cogni-editor][contenteditable] ol,
+.dark [data-cogni-editor][contenteditable] strong,
+.dark [data-cogni-editor][contenteditable] em,
+.dark [data-cogni-editor][contenteditable] span {
+  color: #E8EAED !important;
+  -webkit-text-fill-color: #E8EAED !important;
+}
+
+[data-cogni-editor][contenteditable] a {
+  color: #1456F0 !important;
+  -webkit-text-fill-color: #1456F0 !important;
+  text-decoration: underline;
+}
+
+[data-cogni-editor][contenteditable] blockquote,
+[data-cogni-editor][contenteditable] blockquote * {
+  color: #646A73 !important;
+  -webkit-text-fill-color: #646A73 !important;
+  border-left: 3px solid #E4E6EB;
+  padding-left: 0.75rem;
+}
+
+[data-cogni-editor][contenteditable] code {
+  background: #F7F8FA;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+[data-cogni-editor][contenteditable] pre {
+  background: #F7F8FA;
+  padding: 0.75rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+[data-cogni-editor][contenteditable] pre code {
+  background: none;
+  padding: 0;
+}
+
+[data-cogni-editor][contenteditable] h1 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+[data-cogni-editor][contenteditable] h2 { font-size: 1.1rem; font-weight: 600; margin: 0.6rem 0 0.4rem; }
+[data-cogni-editor][contenteditable] h3 { font-size: 1rem; font-weight: 600; margin: 0.5rem 0 0.3rem; }
+[data-cogni-editor][contenteditable] p { margin: 0.25rem 0; }
+[data-cogni-editor][contenteditable] ul,
+[data-cogni-editor][contenteditable] ol { padding-left: 1.25rem; margin: 0.25rem 0; }
+[data-cogni-editor][contenteditable] strong { font-weight: 600; }
+[data-cogni-editor][contenteditable] hr { border-color: #E4E6EB; margin: 0.75rem 0; }
+
+[data-cogni-editor][contenteditable] {
+  outline: none;
+  min-height: 120px;
+}
+
+/* Placeholder */
+[data-cogni-editor] p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #8F959E !important;
+  -webkit-text-fill-color: #8F959E !important;
+  pointer-events: none;
+  height: 0;
+}
+`;
+
 export function MarkdownEditor({
   content,
   onChange,
@@ -25,7 +117,6 @@ export function MarkdownEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const isExternalUpdate = useRef(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -48,26 +139,18 @@ export function MarkdownEditor({
       }),
     ],
     content,
+    injectCSS: false, // Disable tiptap's default CSS injection
+    editorProps: {
+      attributes: {
+        "data-cogni-editor": "true",
+      },
+    },
     onUpdate: ({ editor }) => {
       if (isExternalUpdate.current) return;
       const md = editor.storage.markdown.getMarkdown();
       onChangeRef.current(md);
     },
   });
-
-  // Force text color via direct DOM manipulation after editor mounts
-  useEffect(() => {
-    if (!editor) return;
-
-    const el = editor.view.dom as HTMLElement;
-    applyColors(el);
-
-    // Watch for new nodes (e.g. when user types and new <p>/<h1> etc are created)
-    const observer = new MutationObserver(() => applyColors(el));
-    observer.observe(el, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, [editor]);
 
   // Sync content from outside
   useEffect(() => {
@@ -77,105 +160,18 @@ export function MarkdownEditor({
       isExternalUpdate.current = true;
       editor.commands.setContent(content || "");
       isExternalUpdate.current = false;
-      // Re-apply colors after content change
-      requestAnimationFrame(() => applyColors(editor.view.dom as HTMLElement));
     }
   }, [editor, content]);
 
   return (
-    <div
-      ref={wrapperRef}
-      className={`rounded-sm border border-border bg-surface px-3 py-2 text-sm cursor-text ${className}`}
-      onClick={() => editor?.commands.focus()}
-    >
-      <EditorContent editor={editor} />
-    </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: EDITOR_STYLES }} />
+      <div
+        className={`rounded-sm border border-border bg-surface px-3 py-2 text-sm cursor-text ${className}`}
+        onClick={() => editor?.commands.focus()}
+      >
+        <EditorContent editor={editor} />
+      </div>
+    </>
   );
-}
-
-/** Directly set color on the editor element and ALL its children */
-function applyColors(el: HTMLElement) {
-  const isDark = document.documentElement.classList.contains("dark");
-  const textColor = isDark ? "#E8EAED" : "#1F2329";
-  const mutedColor = isDark ? "#A1A5AB" : "#646A73";
-  const linkColor = isDark ? "#4B83F2" : "#1456F0";
-  const codeBg = isDark ? "#25282E" : "#F7F8FA";
-  const borderColor = isDark ? "#35383E" : "#E4E6EB";
-
-  // Root element
-  el.style.color = textColor;
-  el.style.outline = "none";
-  el.style.minHeight = "120px";
-
-  // All children
-  el.querySelectorAll("*").forEach((child) => {
-    const node = child as HTMLElement;
-    const tag = node.tagName.toLowerCase();
-
-    if (tag === "a") {
-      node.style.color = linkColor;
-      node.style.textDecoration = "underline";
-    } else if (tag === "blockquote") {
-      node.style.color = mutedColor;
-      node.style.borderLeft = `3px solid ${borderColor}`;
-      node.style.paddingLeft = "0.75rem";
-      node.style.margin = "0.5rem 0";
-    } else if (tag === "code" && node.parentElement?.tagName.toLowerCase() !== "pre") {
-      node.style.color = textColor;
-      node.style.backgroundColor = codeBg;
-      node.style.padding = "0.1rem 0.3rem";
-      node.style.borderRadius = "4px";
-      node.style.fontSize = "0.85em";
-    } else if (tag === "pre") {
-      node.style.color = textColor;
-      node.style.backgroundColor = codeBg;
-      node.style.padding = "0.75rem";
-      node.style.borderRadius = "6px";
-      node.style.margin = "0.5rem 0";
-      node.style.overflowX = "auto";
-    } else {
-      node.style.color = textColor;
-    }
-
-    // Headings
-    if (tag === "h1") {
-      node.style.fontSize = "1.25rem";
-      node.style.fontWeight = "600";
-      node.style.margin = "0.75rem 0 0.5rem";
-    } else if (tag === "h2") {
-      node.style.fontSize = "1.1rem";
-      node.style.fontWeight = "600";
-      node.style.margin = "0.6rem 0 0.4rem";
-    } else if (tag === "h3") {
-      node.style.fontSize = "1rem";
-      node.style.fontWeight = "600";
-      node.style.margin = "0.5rem 0 0.3rem";
-    }
-
-    // Lists
-    if (tag === "ul" || tag === "ol") {
-      node.style.paddingLeft = "1.25rem";
-      node.style.margin = "0.25rem 0";
-    }
-
-    // Strong
-    if (tag === "strong") {
-      node.style.fontWeight = "600";
-    }
-
-    // Paragraphs
-    if (tag === "p") {
-      node.style.margin = "0.25rem 0";
-      // Placeholder
-      if (node.classList.contains("is-editor-empty") && node.parentElement === el) {
-        // Don't override placeholder color
-      }
-    }
-
-    // HR
-    if (tag === "hr") {
-      node.style.borderColor = borderColor;
-      node.style.margin = "0.75rem 0";
-    }
-  });
 }
