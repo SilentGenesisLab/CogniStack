@@ -49,12 +49,7 @@ export function MarkdownEditor({
     content,
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[120px] " +
-          "prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 " +
-          "prose-a:text-primary prose-blockquote:border-primary/30 " +
-          "prose-code:bg-surface-secondary prose-code:px-1 prose-code:rounded " +
-          "prose-h1:text-lg prose-h2:text-base prose-h3:text-sm",
+        class: "tiptap focus:outline-none min-h-[120px]",
       },
     },
     onUpdate: ({ editor }) => {
