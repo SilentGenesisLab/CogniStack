@@ -607,7 +607,7 @@ function TaskDetail({
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description || "");
   const titleRef = useRef<HTMLInputElement>(null);
-  const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync when task changes
   useEffect(() => {
