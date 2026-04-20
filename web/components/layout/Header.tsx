@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { useTheme } from "@/components/providers/ThemeProvider";
-import { Moon, Sun, User } from "lucide-react";
+import { Moon, Sun, User, LogOut } from "lucide-react";
 
 const pathLabels: Record<string, string> = {
   "/dashboard": "今日概览",
@@ -19,6 +21,20 @@ export function Header() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const currentLabel = pathLabels[pathname] || "";
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-surface px-6">
@@ -49,9 +65,27 @@ export function Header() {
           )}
         </button>
 
-        <button className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-primary">
-          <User className="h-[18px] w-[18px]" />
-        </button>
+        {/* User menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-primary transition-colors hover:bg-blue-100"
+          >
+            <User className="h-[18px] w-[18px]" />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-10 z-50 w-40 rounded-sm border border-border bg-surface py-1 shadow-lg">
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                退出登录
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
