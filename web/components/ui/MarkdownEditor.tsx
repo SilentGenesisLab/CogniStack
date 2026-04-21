@@ -32,47 +32,32 @@ const EDITOR_STYLES = `
 [data-cogni-editor][contenteditable] strong,
 [data-cogni-editor][contenteditable] em,
 [data-cogni-editor][contenteditable] span {
-  color: #1F2329 !important;
-  -webkit-text-fill-color: #1F2329 !important;
-}
-
-.dark [data-cogni-editor][contenteditable],
-.dark [data-cogni-editor][contenteditable] p,
-.dark [data-cogni-editor][contenteditable] h1,
-.dark [data-cogni-editor][contenteditable] h2,
-.dark [data-cogni-editor][contenteditable] h3,
-.dark [data-cogni-editor][contenteditable] li,
-.dark [data-cogni-editor][contenteditable] ul,
-.dark [data-cogni-editor][contenteditable] ol,
-.dark [data-cogni-editor][contenteditable] strong,
-.dark [data-cogni-editor][contenteditable] em,
-.dark [data-cogni-editor][contenteditable] span {
-  color: #E8EAED !important;
-  -webkit-text-fill-color: #E8EAED !important;
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 [data-cogni-editor][contenteditable] a {
-  color: #1456F0 !important;
-  -webkit-text-fill-color: #1456F0 !important;
+  color: var(--primary) !important;
+  -webkit-text-fill-color: var(--primary) !important;
   text-decoration: underline;
 }
 
 [data-cogni-editor][contenteditable] blockquote,
 [data-cogni-editor][contenteditable] blockquote * {
-  color: #646A73 !important;
-  -webkit-text-fill-color: #646A73 !important;
-  border-left: 3px solid #E4E6EB;
+  color: var(--text-secondary) !important;
+  -webkit-text-fill-color: var(--text-secondary) !important;
+  border-left: 3px solid var(--border);
   padding-left: 0.75rem;
 }
 
 [data-cogni-editor][contenteditable] code {
-  background: #F7F8FA;
+  background: var(--surface-secondary);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
   font-size: 0.85em;
 }
 [data-cogni-editor][contenteditable] pre {
-  background: #F7F8FA;
+  background: var(--surface-secondary);
   padding: 0.75rem;
   border-radius: 6px;
   overflow-x: auto;
@@ -90,7 +75,7 @@ const EDITOR_STYLES = `
 [data-cogni-editor][contenteditable] ul,
 [data-cogni-editor][contenteditable] ol { padding-left: 1.25rem; margin: 0.25rem 0; }
 [data-cogni-editor][contenteditable] strong { font-weight: 600; }
-[data-cogni-editor][contenteditable] hr { border-color: #E4E6EB; margin: 0.75rem 0; }
+[data-cogni-editor][contenteditable] hr { border-color: var(--border); margin: 0.75rem 0; }
 
 [data-cogni-editor][contenteditable] {
   outline: none;
@@ -101,8 +86,8 @@ const EDITOR_STYLES = `
 [data-cogni-editor] p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: #8F959E !important;
-  -webkit-text-fill-color: #8F959E !important;
+  color: var(--text-muted) !important;
+  -webkit-text-fill-color: var(--text-muted) !important;
   pointer-events: none;
   height: 0;
 }
@@ -167,7 +152,8 @@ export function MarkdownEditor({
     <>
       <style dangerouslySetInnerHTML={{ __html: EDITOR_STYLES }} />
       <div
-        className={`rounded-sm border border-border bg-surface px-3 py-2 text-sm cursor-text ${className}`}
+        className={`rounded-sm border px-3 py-2 text-sm cursor-text ${className}`}
+        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
         onClick={() => editor?.commands.focus()}
       >
         <EditorContent editor={editor} />
