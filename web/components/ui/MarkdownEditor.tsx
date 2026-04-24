@@ -10,7 +10,7 @@ import Link from "@tiptap/extension-link";
 import { Table, TableRow, TableCell, TableHeader } from "@tiptap/extension-table";
 import { Markdown } from "tiptap-markdown";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { DOMParser as PmDOMParser } from "@tiptap/pm/model";
+import { DOMParser as PmDOMParser, Node as PmNode } from "@tiptap/pm/model";
 import { Extension } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 
@@ -202,27 +202,24 @@ const MarkdownPaste = Extension.create({
                   // Insert a placeholder, then replace with real URL
                   const placeholderSrc = URL.createObjectURL(file);
                   editor.chain().focus().setImage({ src: placeholderSrc }).run();
-                  // Find the inserted image node position
-                  const pos = view.state.selection.from - 1;
                   uploadImage(file).then((url) => {
                     // Replace placeholder with real URL
                     const { state } = editor.view;
-                    state.doc.descendants((node, nodePos) => {
+                    let found = false;
+                    state.doc.descendants((node: PmNode, nodePos: number) => {
+                      if (found) return false;
                       if (node.type.name === "image" && node.attrs.src === placeholderSrc) {
+                        found = true;
                         const tr = state.tr.setNodeMarkup(nodePos, undefined, {
                           ...node.attrs,
                           src: url,
                         });
                         editor.view.dispatch(tr);
-                        URL.revokeObjectURL(placeholderSrc);
-                        // Trigger content update
-                        const md = editor.storage.markdown.getMarkdown();
-                        editor.options.onUpdate?.({ editor, transaction: tr } as never);
                       }
                     });
                   }).catch(() => {
-                    // Remove placeholder on failure
                     editor.commands.undo();
+                  }).finally(() => {
                     URL.revokeObjectURL(placeholderSrc);
                   });
                   return true;

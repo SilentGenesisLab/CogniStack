@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import OSS from "ali-oss";
+import { randomUUID } from "crypto";
+
+const ALLOWED_MIME: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 const client = new OSS({
   region: "oss-cn-beijing",
@@ -21,15 +30,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "缺少文件" }, { status: 400 });
   }
 
-  const mimeToExt: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
-  const ext = mimeToExt[file.type] || file.name?.split(".").pop() || "png";
+  if (file.size > MAX_SIZE) {
+    return NextResponse.json({ error: "文件过大，最大 5MB" }, { status: 413 });
+  }
+
+  const ext = ALLOWED_MIME[file.type];
+  if (!ext) {
+    return NextResponse.json({ error: "仅支持 PNG/JPG/GIF/WebP" }, { status: 400 });
+  }
+
   const prefix = process.env.OSS_PREFIX || "temp";
-  const key = `${prefix}/tasks/${session.user.id}/${Date.now()}.${ext}`;
+  const key = `${prefix}/tasks/${session.user.id}/${randomUUID()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await client.put(key, buffer, {
-    mime: file.type || "image/png",
-  });
+  const result = await client.put(key, buffer, { mime: file.type });
 
   const url = result.url.replace(/^http:/, "https:");
 
