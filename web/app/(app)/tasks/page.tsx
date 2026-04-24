@@ -134,7 +134,7 @@ export default function TasksPage() {
     const res = await fetch("/api/tasks/lists", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newListName.trim() }),
+      body: JSON.stringify({ name: newListName.trim(), sortOrder: lists.length }),
     });
     if (res.ok) {
       setNewListName("");
@@ -308,8 +308,6 @@ export default function TasksPage() {
   // Resizable divider state
   const [leftWidth, setLeftWidth] = useState(220);
   const [isResizing, setIsResizing] = useState(false);
-  const [resizeReady, setResizeReady] = useState(false);
-  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(220);
 
@@ -323,7 +321,6 @@ export default function TasksPage() {
     };
     const onMouseUp = () => {
       setIsResizing(false);
-      setResizeReady(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -524,19 +521,11 @@ export default function TasksPage() {
 
       {/* ===== Resizable Divider ===== */}
       <div
-        className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
-          isResizing || resizeReady ? "bg-primary" : "bg-transparent hover:bg-border"
+        className={`w-1.5 flex-shrink-0 cursor-col-resize transition-colors ${
+          isResizing ? "bg-primary" : "bg-transparent hover:bg-primary/40"
         }`}
-        style={{ marginLeft: "-2px", marginRight: "-2px", zIndex: 10 }}
-        onMouseEnter={() => {
-          resizeTimerRef.current = setTimeout(() => setResizeReady(true), 1000);
-        }}
-        onMouseLeave={() => {
-          if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
-          if (!isResizing) setResizeReady(false);
-        }}
+        style={{ marginLeft: "-3px", marginRight: "-3px", zIndex: 10 }}
         onMouseDown={(e) => {
-          if (!resizeReady) return;
           e.preventDefault();
           startXRef.current = e.clientX;
           startWidthRef.current = leftWidth;
