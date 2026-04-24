@@ -270,12 +270,12 @@ async function handleGrade(
     data: {
       userId,
       title: body.title || "复盘考试",
-      questions: questions as unknown as Record<string, unknown>[],
-      answers: answers as unknown as Record<string, unknown>,
+      questions: JSON.parse(JSON.stringify(questions)),
+      answers: JSON.parse(JSON.stringify(answers)),
       totalScore,
       maxScore,
       percentage,
-      results: results as unknown as Record<string, unknown>[],
+      results: JSON.parse(JSON.stringify(results)),
     },
   });
 
