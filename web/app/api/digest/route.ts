@@ -48,6 +48,17 @@ export async function POST(req: NextRequest) {
       include: { cards: true },
     });
 
+    // 同时创建知识种子记录
+    await prisma.knowledgeSeed.create({
+      data: {
+        title: deckTitle,
+        content,
+        type: "text",
+        userId: session.user.id,
+        deckId: deck.id,
+      },
+    });
+
     return NextResponse.json({ deck, summary, key_points });
   } catch (e) {
     console.error("[digest]", e);
