@@ -168,11 +168,6 @@ const EDITOR_STYLES = `
 }
 `;
 
-/**
- * Force-parse pasted text as Markdown, regardless of source (rich text or plain text).
- * tiptap-markdown's built-in transformPastedText skips plain-text pastes,
- * so we override the clipboardTextParser ourselves.
- */
 async function uploadImage(file: File): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
@@ -182,8 +177,17 @@ async function uploadImage(file: File): Promise<string> {
   return data.url;
 }
 
+/**
+ * Image paste + Markdown paste extension.
+ * Uses editor.storage.imagePaste to share upload state with the component.
+ */
 const MarkdownPaste = Extension.create({
   name: "markdownPaste",
+
+  addStorage() {
+    return { uploading: 0 };
+  },
+
   addProseMirrorPlugins() {
     const editor = this.editor;
     return [
@@ -199,11 +203,13 @@ const MarkdownPaste = Extension.create({
                   event.preventDefault();
                   const file = items[i].getAsFile();
                   if (!file) return true;
-                  // Insert a placeholder, then replace with real URL
+
                   const placeholderSrc = URL.createObjectURL(file);
+                  editor.storage.markdownPaste.uploading++;
                   editor.chain().focus().setImage({ src: placeholderSrc }).run();
+
                   uploadImage(file).then((url) => {
-                    // Replace placeholder with real URL
+                    // Replace placeholder blob URL with the real OSS URL
                     const { state } = editor.view;
                     let found = false;
                     state.doc.descendants((node: PmNode, nodePos: number) => {
@@ -220,6 +226,7 @@ const MarkdownPaste = Extension.create({
                   }).catch(() => {
                     editor.commands.undo();
                   }).finally(() => {
+                    editor.storage.markdownPaste.uploading--;
                     URL.revokeObjectURL(placeholderSrc);
                   });
                   return true;
@@ -255,6 +262,7 @@ export function MarkdownEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const isExternalUpdate = useRef(false);
+  const lastInternalMd = useRef(content);
 
   // Track active block element for showing markdown hints
   const updateActiveBlock = useCallback((editorView: { dom: HTMLElement; state: { selection: { $from: { start: () => number } } }; domAtPos: (pos: number) => { node: Node } }) => {
@@ -339,6 +347,7 @@ export function MarkdownEditor({
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
       const md = ed.storage.markdown.getMarkdown();
+      lastInternalMd.current = md;
       onChangeRef.current(md);
     },
     onSelectionUpdate: ({ editor: ed }) => {
@@ -349,15 +358,17 @@ export function MarkdownEditor({
     },
   });
 
-  // Sync content from outside
+  // Sync content from outside — skip when:
+  // 1. The change originated from the editor itself (lastInternalMd matches)
+  // 2. An image upload is in progress (prevents stale server data from clobbering the editor)
   useEffect(() => {
     if (!editor) return;
-    const currentMd = editor.storage.markdown.getMarkdown();
-    if (currentMd !== content) {
-      isExternalUpdate.current = true;
-      editor.commands.setContent(content || "");
-      isExternalUpdate.current = false;
-    }
+    if (editor.storage.markdownPaste?.uploading > 0) return;
+    if (content === lastInternalMd.current) return;
+    isExternalUpdate.current = true;
+    editor.commands.setContent(content || "");
+    isExternalUpdate.current = false;
+    lastInternalMd.current = content;
   }, [editor, content]);
 
   return (
