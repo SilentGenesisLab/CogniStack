@@ -47,6 +47,7 @@ model User {
   trainingLogs   TrainingLog[]
   moodLogs       MoodLog[]
   knowledgeSeeds KnowledgeSeed[]
+  examRecords    ExamRecord[]
 
   @@map("users")
 }
@@ -192,6 +193,24 @@ model MoodLog {
 
   @@index([userId])
   @@map("mood_logs")
+}
+
+model ExamRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  title      String   @default("复盘考试")
+  questions  Json     // ExamQuestion[]
+  answers    Json     // Record<number, string>
+  totalScore Int
+  maxScore   Int
+  percentage Int
+  results    Json     // GradeResult[]
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("exam_records")
 }
 
 model VerificationCode {
