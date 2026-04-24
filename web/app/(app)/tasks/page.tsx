@@ -305,10 +305,42 @@ export default function TasksPage() {
 
   const allTaskCount = tasks.length;
 
+  // Resizable divider state
+  const [leftWidth, setLeftWidth] = useState(220);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeReady, setResizeReady] = useState(false);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(220);
+
+  // Handle resize drag
+  useEffect(() => {
+    if (!isResizing) return;
+    const onMouseMove = (e: MouseEvent) => {
+      const diff = e.clientX - startXRef.current;
+      const newWidth = Math.max(160, Math.min(400, startWidthRef.current + diff));
+      setLeftWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      setIsResizing(false);
+      setResizeReady(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isResizing]);
+
   return (
-    <div className="flex h-full -m-6">
+    <div className="flex -m-6" style={{ height: "calc(100% + 3rem)" }}>
       {/* ===== Left: Task Lists ===== */}
-      <div className="w-[220px] flex-shrink-0 border-r border-border bg-surface flex flex-col">
+      <div className="flex-shrink-0 border-r border-border bg-surface flex flex-col" style={{ width: `${leftWidth}px` }}>
         <div className="p-3 border-b border-border">
           <h2 className="text-sm font-semibold text-text-primary">清单</h2>
         </div>
@@ -451,20 +483,20 @@ export default function TasksPage() {
           ))}
         </div>
 
-        <div className="border-t border-border p-2">
+        <div className="border-t border-border px-2 py-2">
           {showNewList ? (
-            <div className="flex gap-1">
+            <div className="flex items-center gap-2 mt-1">
               <input
                 autoFocus
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createList()}
                 placeholder="清单名称"
-                className="flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none"
+                className="flex-1 min-w-0 rounded-sm border border-border bg-surface px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none"
               />
               <button
                 onClick={createList}
-                className="rounded-sm bg-primary px-2 py-1 text-xs text-white hover:bg-primary-hover"
+                className="rounded-sm bg-primary px-3 py-1 text-xs text-white hover:bg-primary-hover whitespace-nowrap flex-shrink-0"
               >
                 确定
               </button>
@@ -473,7 +505,7 @@ export default function TasksPage() {
                   setShowNewList(false);
                   setNewListName("");
                 }}
-                className="rounded-sm px-1 py-1 text-text-muted hover:text-text-primary"
+                className="rounded-sm px-1 py-1 text-text-muted hover:text-text-primary flex-shrink-0"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -489,6 +521,28 @@ export default function TasksPage() {
           )}
         </div>
       </div>
+
+      {/* ===== Resizable Divider ===== */}
+      <div
+        className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
+          isResizing || resizeReady ? "bg-primary" : "bg-transparent hover:bg-border"
+        }`}
+        style={{ marginLeft: "-2px", marginRight: "-2px", zIndex: 10 }}
+        onMouseEnter={() => {
+          resizeTimerRef.current = setTimeout(() => setResizeReady(true), 1000);
+        }}
+        onMouseLeave={() => {
+          if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+          if (!isResizing) setResizeReady(false);
+        }}
+        onMouseDown={(e) => {
+          if (!resizeReady) return;
+          e.preventDefault();
+          startXRef.current = e.clientX;
+          startWidthRef.current = leftWidth;
+          setIsResizing(true);
+        }}
+      />
 
       {/* ===== Middle: Task List ===== */}
       <div className="flex-1 flex flex-col min-w-0 bg-surface-secondary">
