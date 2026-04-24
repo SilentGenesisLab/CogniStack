@@ -179,13 +179,18 @@ async function uploadImage(file: File): Promise<string> {
 
 /**
  * Image paste + Markdown paste extension.
- * Uses editor.storage.imagePaste to share upload state with the component.
+ * Uses editor.storage.markdownPaste to coordinate with the component:
+ *   - uploading: number of in-flight uploads (>0 blocks external sync)
+ *   - emitChange: callback set by the component to emit markdown onChange
  */
 const MarkdownPaste = Extension.create({
   name: "markdownPaste",
 
   addStorage() {
-    return { uploading: 0 };
+    return {
+      uploading: 0,
+      emitChange: null as (() => void) | null,
+    };
   },
 
   addProseMirrorPlugins() {
@@ -226,8 +231,13 @@ const MarkdownPaste = Extension.create({
                   }).catch(() => {
                     editor.commands.undo();
                   }).finally(() => {
-                    editor.storage.markdownPaste.uploading--;
                     URL.revokeObjectURL(placeholderSrc);
+                    editor.storage.markdownPaste.uploading--;
+                    // After all uploads complete, emit the final clean markdown
+                    if (editor.storage.markdownPaste.uploading <= 0) {
+                      editor.storage.markdownPaste.uploading = 0;
+                      editor.storage.markdownPaste.emitChange?.();
+                    }
                   });
                   return true;
                 }
@@ -267,13 +277,11 @@ export function MarkdownEditor({
   // Track active block element for showing markdown hints
   const updateActiveBlock = useCallback((editorView: { dom: HTMLElement; state: { selection: { $from: { start: () => number } } }; domAtPos: (pos: number) => { node: Node } }) => {
     const dom = editorView.dom;
-    // Remove all md-active classes
     dom.querySelectorAll(".md-active").forEach((el) => el.classList.remove("md-active"));
     try {
       const { $from } = editorView.state.selection;
       const startPos = $from.start();
       const resolved = editorView.domAtPos(startPos);
-      // Walk up to find the direct child of the editor (the block element)
       let blockEl: HTMLElement | null =
         resolved.node.nodeType === 1
           ? (resolved.node as HTMLElement)
@@ -346,6 +354,9 @@ export function MarkdownEditor({
     },
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdate.current) return;
+      // Block onChange during image upload to prevent blob URLs from
+      // being saved to server and causing stale-data race conditions
+      if (ed.storage.markdownPaste?.uploading > 0) return;
       const md = ed.storage.markdown.getMarkdown();
       lastInternalMd.current = md;
       onChangeRef.current(md);
@@ -354,16 +365,22 @@ export function MarkdownEditor({
       updateActiveBlock(ed.view);
     },
     onCreate: ({ editor: ed }) => {
+      // Store emitChange callback so the module-scope extension can call it
+      ed.storage.markdownPaste.emitChange = () => {
+        const md = ed.storage.markdown.getMarkdown();
+        lastInternalMd.current = md;
+        onChangeRef.current(md);
+      };
       updateActiveBlock(ed.view);
     },
   });
 
-  // Sync content from outside — skip when:
-  // 1. The change originated from the editor itself (lastInternalMd matches)
-  // 2. An image upload is in progress (prevents stale server data from clobbering the editor)
+  // Sync content from outside — only when the change is truly external
   useEffect(() => {
     if (!editor) return;
+    // Never reset during upload
     if (editor.storage.markdownPaste?.uploading > 0) return;
+    // Skip if content matches what the editor last emitted
     if (content === lastInternalMd.current) return;
     isExternalUpdate.current = true;
     editor.commands.setContent(content || "");

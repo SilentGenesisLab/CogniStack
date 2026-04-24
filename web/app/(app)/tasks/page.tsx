@@ -1170,7 +1170,13 @@ function TaskDetail({
   const saveDesc = (md: string) => {
     if (descTimeout.current) clearTimeout(descTimeout.current);
     descTimeout.current = setTimeout(() => {
-      onUpdate(task.id, { description: md });
+      // Save description silently — don't trigger fetchTasks/setSelectedTask
+      // to prevent stale server data from resetting the editor during image upload
+      fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: md }),
+      });
     }, 800);
   };
 
