@@ -33,6 +33,7 @@ interface Task {
   description: string | null;
   quadrant: Quadrant;
   priority: number;
+  startAt: string;
   dueAt: string | null;
   completedAt: string | null;
   duration: number | null;
@@ -1290,14 +1291,29 @@ function TaskDetail({
           </select>
         </div>
 
+        {/* Start date */}
+        <div className="mb-4">
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">
+            开始时间
+          </label>
+          <input
+            type="datetime-local"
+            value={task.startAt ? task.startAt.slice(0, 16) : ""}
+            onChange={(e) =>
+              onUpdate(task.id, { startAt: e.target.value || null })
+            }
+            className="w-full rounded-sm border border-border bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+          />
+        </div>
+
         {/* Due date */}
         <div className="mb-4">
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
             截止日期
           </label>
           <input
-            type="date"
-            value={task.dueAt ? task.dueAt.slice(0, 10) : ""}
+            type="datetime-local"
+            value={task.dueAt ? task.dueAt.slice(0, 16) : ""}
             onChange={(e) =>
               onUpdate(task.id, { dueAt: e.target.value || null })
             }

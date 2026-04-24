@@ -122,6 +122,7 @@ model Task {
   parentId       String?
   quadrant       Quadrant  @default(NOT_URGENT_NOT_IMPORTANT)
   priority       Int       @default(0)
+  startAt        DateTime  @default(now())
   dueAt          DateTime?
   completedAt    DateTime?
   duration       Int?      // 完成用时（分钟）

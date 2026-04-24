@@ -13,7 +13,7 @@ export async function GET() {
     include: {
       _count: { select: { tasks: true } },
     },
-    orderBy: { sortOrder: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 
   return NextResponse.json(lists);
@@ -30,15 +30,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "清单名称不能为空" }, { status: 400 });
   }
 
-  const count = await prisma.taskList.count({
+  const maxSort = await prisma.taskList.aggregate({
     where: { userId: session.user.id },
+    _max: { sortOrder: true },
   });
 
   const list = await prisma.taskList.create({
     data: {
       name: name.trim(),
       color: color || "#3B82F6",
-      sortOrder: count,
+      sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
       userId: session.user.id,
     },
   });

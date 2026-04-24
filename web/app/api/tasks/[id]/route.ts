@@ -27,6 +27,7 @@ export async function PATCH(
   if (body.quadrant !== undefined) data.quadrant = body.quadrant;
   if (body.priority !== undefined) data.priority = body.priority;
   if (body.listId !== undefined) data.listId = body.listId || null;
+  if (body.startAt !== undefined) data.startAt = body.startAt ? new Date(body.startAt) : new Date();
   if (body.dueAt !== undefined) data.dueAt = body.dueAt ? new Date(body.dueAt) : null;
   if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
   if (body.duration !== undefined) data.duration = body.duration;
