@@ -12,6 +12,7 @@ import { Markdown } from "tiptap-markdown";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { DOMParser as PmDOMParser } from "@tiptap/pm/model";
 import { Extension } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
 
 interface MarkdownEditorProps {
   content: string;
@@ -133,6 +134,23 @@ const EDITOR_STYLES = `
   opacity: 0.7;
 }
 
+/* Image styles */
+[data-cogni-editor][contenteditable] img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  cursor: default;
+}
+[data-cogni-editor][contenteditable] img.ProseMirror-selectednode {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+[data-cogni-editor] .image-uploading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 [data-cogni-editor][contenteditable] {
   outline: none;
   min-height: 60px;
@@ -155,6 +173,15 @@ const EDITOR_STYLES = `
  * tiptap-markdown's built-in transformPastedText skips plain-text pastes,
  * so we override the clipboardTextParser ourselves.
  */
+async function uploadImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/upload", { method: "POST", body: formData });
+  if (!res.ok) throw new Error("上传失败");
+  const data = await res.json();
+  return data.url;
+}
+
 const MarkdownPaste = Extension.create({
   name: "markdownPaste",
   addProseMirrorPlugins() {
@@ -164,12 +191,49 @@ const MarkdownPaste = Extension.create({
         key: new PluginKey("markdownPaste"),
         props: {
           handlePaste: (view, event) => {
+            // Handle image paste (screenshot / copied image)
+            const items = event.clipboardData?.items;
+            if (items) {
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith("image/")) {
+                  event.preventDefault();
+                  const file = items[i].getAsFile();
+                  if (!file) return true;
+                  // Insert a placeholder, then replace with real URL
+                  const placeholderSrc = URL.createObjectURL(file);
+                  editor.chain().focus().setImage({ src: placeholderSrc }).run();
+                  // Find the inserted image node position
+                  const pos = view.state.selection.from - 1;
+                  uploadImage(file).then((url) => {
+                    // Replace placeholder with real URL
+                    const { state } = editor.view;
+                    state.doc.descendants((node, nodePos) => {
+                      if (node.type.name === "image" && node.attrs.src === placeholderSrc) {
+                        const tr = state.tr.setNodeMarkup(nodePos, undefined, {
+                          ...node.attrs,
+                          src: url,
+                        });
+                        editor.view.dispatch(tr);
+                        URL.revokeObjectURL(placeholderSrc);
+                        // Trigger content update
+                        const md = editor.storage.markdown.getMarkdown();
+                        editor.options.onUpdate?.({ editor, transaction: tr } as never);
+                      }
+                    });
+                  }).catch(() => {
+                    // Remove placeholder on failure
+                    editor.commands.undo();
+                    URL.revokeObjectURL(placeholderSrc);
+                  });
+                  return true;
+                }
+              }
+            }
+            // Handle text paste as markdown
             const text = event.clipboardData?.getData("text/plain");
             if (!text?.trim()) return false;
             event.preventDefault();
-            // Parse the plain text as markdown using tiptap-markdown's parser
             const htmlString = editor.storage.markdown.parser.parse(text);
-            // Create a temp DOM element to parse
             const tempEl = document.createElement("div");
             tempEl.innerHTML = htmlString;
             const slice = PmDOMParser.fromSchema(editor.schema).parseSlice(tempEl, {
@@ -238,6 +302,10 @@ export function MarkdownEditor({
       TableRow,
       TableCell,
       TableHeader,
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+      }),
       Markdown.configure({
         html: false,
         transformPastedText: false,
