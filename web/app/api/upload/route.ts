@@ -11,12 +11,18 @@ const ALLOWED_MIME: Record<string, string> = {
 };
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
-const client = new OSS({
-  region: "oss-cn-beijing",
-  accessKeyId: process.env.OSS_ACCESS_KEY_ID!,
-  accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET!,
-  bucket: process.env.OSS_BUCKET!,
-});
+let _client: OSS | null = null;
+function getOSSClient() {
+  if (!_client) {
+    _client = new OSS({
+      region: "oss-cn-beijing",
+      accessKeyId: process.env.OSS_ACCESS_KEY_ID!,
+      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET!,
+      bucket: process.env.OSS_BUCKET!,
+    });
+  }
+  return _client;
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -43,7 +49,7 @@ export async function POST(req: NextRequest) {
   const key = `${prefix}/tasks/${session.user.id}/${randomUUID()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await client.put(key, buffer, { mime: file.type });
+  const result = await getOSSClient().put(key, buffer, { mime: file.type });
 
   const url = result.url.replace(/^http:/, "https:");
 
