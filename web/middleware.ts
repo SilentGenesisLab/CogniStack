@@ -18,11 +18,16 @@ function getSessionToken(req: NextRequest): string | undefined {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Always pass through: static assets, API routes
+  // Always pass through: static assets, API routes, public files
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".ico") ||
+    pathname.endsWith(".svg") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".webp")
   ) {
     return NextResponse.next();
   }
