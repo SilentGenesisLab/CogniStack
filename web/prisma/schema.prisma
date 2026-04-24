@@ -52,15 +52,19 @@ model User {
 }
 
 model KnowledgeSeed {
-  id        String   @id @default(cuid())
-  title     String
-  content   String
-  type      String   @default("text") // text, url, file
-  source    String?  // 原始来源（URL、文件名等）
-  deckId    String?  // 关联的卡组（消化后）
-  userId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  title        String
+  content      String
+  type         String   @default("text") // text, url, file
+  source       String?  // 原始来源（URL、文件名等）
+  status       String   @default("completed") // pending, processing, completed, failed
+  summary      String?
+  keyPoints    String[] @default([])
+  errorMessage String?
+  deckId       String?  // 关联的卡组（消化后）
+  userId       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   deck Deck? @relation(fields: [deckId], references: [id], onDelete: SetNull)
