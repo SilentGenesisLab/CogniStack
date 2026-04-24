@@ -15,6 +15,7 @@ import {
   X,
   Sparkles,
   ChevronDown,
+  Brain,
 } from "lucide-react";
 
 interface KnowledgeSeed {
@@ -60,6 +61,12 @@ export default function KnowledgePage() {
   // Delete confirm
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Mastery stats
+  const [masteryStats, setMasteryStats] = useState<{
+    total: number;
+    mastery: Record<string, { count: number; ratio: number }>;
+  } | null>(null);
+
   const fetchSeeds = useCallback(async () => {
     try {
       const res = await fetch("/api/knowledge");
@@ -73,6 +80,13 @@ export default function KnowledgePage() {
   }, []);
 
   useEffect(() => { fetchSeeds(); }, [fetchSeeds]);
+
+  useEffect(() => {
+    fetch("/api/review/stats")
+      .then((r) => r.json())
+      .then((data) => setMasteryStats(data))
+      .catch(() => {});
+  }, []);
 
   const openCreate = () => {
     setEditingId(null);
@@ -151,6 +165,62 @@ export default function KnowledgePage() {
           新建知识种子
         </Button>
       </div>
+
+      {/* Mastery Stats */}
+      {masteryStats && masteryStats.total > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-medium text-text-primary">掌握情况</h2>
+            <span className="text-xs text-text-muted">共 {masteryStats.total} 张卡片</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-3 flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary">
+            {[
+              { key: "mastered", color: "bg-green-500", label: "很熟" },
+              { key: "remembered", color: "bg-blue-500", label: "记得" },
+              { key: "fuzzy", color: "bg-orange-400", label: "模糊" },
+              { key: "forgot", color: "bg-red-400", label: "忘了" },
+              { key: "unlearned", color: "bg-gray-300", label: "未学" },
+            ].map((item) => {
+              const ratio = masteryStats.mastery[item.key]?.ratio || 0;
+              if (ratio === 0) return null;
+              return (
+                <div
+                  key={item.key}
+                  className={`${item.color} transition-all`}
+                  style={{ width: `${ratio * 100}%` }}
+                  title={`${item.label}: ${masteryStats.mastery[item.key]?.count || 0}`}
+                />
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {[
+              { key: "mastered", label: "很熟", color: "bg-green-500" },
+              { key: "remembered", label: "记得", color: "bg-blue-500" },
+              { key: "fuzzy", label: "模糊", color: "bg-orange-400" },
+              { key: "forgot", label: "忘了", color: "bg-red-400" },
+              { key: "unlearned", label: "未学", color: "bg-gray-300" },
+            ].map((item) => {
+              const data = masteryStats.mastery[item.key];
+              return (
+                <div key={item.key} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                  <div className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
+                  <span>{item.label}</span>
+                  <span className="font-medium text-text-primary">{data?.count || 0}</span>
+                  <span className="text-text-muted">
+                    ({Math.round((data?.ratio || 0) * 100)}%)
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3">
