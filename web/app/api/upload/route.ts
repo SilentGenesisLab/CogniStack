@@ -48,10 +48,13 @@ export async function POST(req: NextRequest) {
   const prefix = process.env.OSS_PREFIX || "temp";
   const key = `${prefix}/tasks/${session.user.id}/${randomUUID()}.${ext}`;
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await getOSSClient().put(key, buffer, { mime: file.type });
-
-  const url = result.url.replace(/^http:/, "https:");
-
-  return NextResponse.json({ url });
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const result = await getOSSClient().put(key, buffer, { mime: file.type });
+    const url = result.url.replace(/^http:/, "https:");
+    return NextResponse.json({ url });
+  } catch (e) {
+    console.error("[upload] OSS error:", e);
+    return NextResponse.json({ error: "上传失败，请重试" }, { status: 500 });
+  }
 }

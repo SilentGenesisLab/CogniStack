@@ -229,7 +229,15 @@ const MarkdownPaste = Extension.create({
                       }
                     });
                   }).catch(() => {
-                    editor.commands.undo();
+                    // Remove only the placeholder image, not undo all changes
+                    const { state } = editor.view;
+                    state.doc.descendants((node: PmNode, nodePos: number) => {
+                      if (node.type.name === "image" && node.attrs.src === placeholderSrc) {
+                        const tr = editor.view.state.tr.delete(nodePos, nodePos + node.nodeSize);
+                        editor.view.dispatch(tr);
+                        return false;
+                      }
+                    });
                   }).finally(() => {
                     URL.revokeObjectURL(placeholderSrc);
                     editor.storage.markdownPaste.uploading--;
