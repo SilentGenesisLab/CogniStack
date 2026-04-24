@@ -5,6 +5,10 @@ import { Providers } from "@/components/providers";
 export const metadata: Metadata = {
   title: "CogniStack - 认知增强平台",
   description: "基于认知科学的个人成长平台",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

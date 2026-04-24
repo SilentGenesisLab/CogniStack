@@ -68,9 +68,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary px-4">
       <Card padding="lg" className="w-full max-w-[400px]">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-sm bg-primary text-white font-bold">
-            C
-          </div>
+          <img src="/logo.png" alt="CogniStack" className="mx-auto mb-3 h-10 w-10 rounded-sm" />
           <h1 className="text-xl font-semibold text-text-primary">登录 CogniStack</h1>
           <p className="mt-1 text-sm text-text-muted">认知增强，从这里开始</p>
         </div>

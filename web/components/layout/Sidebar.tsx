@@ -33,9 +33,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-14 items-center px-5">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-primary text-white font-bold text-sm">
-            C
-          </div>
+          <img src="/logo.png" alt="CogniStack" className="h-8 w-8 rounded-sm" />
           <span className="text-base font-semibold text-text-primary">
             CogniStack
           </span>

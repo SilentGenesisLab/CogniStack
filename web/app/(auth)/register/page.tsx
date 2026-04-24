@@ -102,9 +102,7 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-secondary px-4">
       <Card padding="lg" className="w-full max-w-[420px]">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-sm bg-primary text-white font-bold">
-            C
-          </div>
+          <img src="/logo.png" alt="CogniStack" className="mx-auto mb-3 h-10 w-10 rounded-sm" />
           <h1 className="text-xl font-semibold text-text-primary">注册 CogniStack</h1>
           <p className="mt-1 text-sm text-text-muted">创建你的认知增强账户</p>
         </div>
