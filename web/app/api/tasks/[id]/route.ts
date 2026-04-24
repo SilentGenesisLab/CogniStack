@@ -29,6 +29,7 @@ export async function PATCH(
   if (body.listId !== undefined) data.listId = body.listId || null;
   if (body.dueAt !== undefined) data.dueAt = body.dueAt ? new Date(body.dueAt) : null;
   if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
+  if (body.duration !== undefined) data.duration = body.duration;
 
   if (body.completed !== undefined) {
     data.completedAt = body.completed ? new Date() : null;

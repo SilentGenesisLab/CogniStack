@@ -12,6 +12,11 @@ import {
   Trash2,
   Calendar,
   X,
+  GripVertical,
+  MoreVertical,
+  Copy,
+  Eye,
+  Clock,
 } from "lucide-react";
 
 /* ---------- types ---------- */
@@ -30,6 +35,7 @@ interface Task {
   priority: number;
   dueAt: string | null;
   completedAt: string | null;
+  duration: number | null;
   sortOrder: number;
   listId: string | null;
   parentId: string | null;
@@ -85,6 +91,23 @@ export default function TasksPage() {
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [listMenuId, setListMenuId] = useState<string | null>(null);
+  const [listDetailId, setListDetailId] = useState<string | null>(null);
+  const [listDragId, setListDragId] = useState<string | null>(null);
+  const [listDropTarget, setListDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+  const listMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close list menu on outside click
+  useEffect(() => {
+    if (!listMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (listMenuRef.current && !listMenuRef.current.contains(e.target as Node)) {
+        setListMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [listMenuId]);
 
   const fetchLists = useCallback(async () => {
     const res = await fetch("/api/tasks/lists");
@@ -175,6 +198,56 @@ export default function TasksPage() {
     fetchLists();
   };
 
+  const duplicateTask = async (task: Task) => {
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: task.title + " (副本)",
+        description: task.description,
+        listId: task.listId,
+        parentId: task.parentId,
+        quadrant: task.quadrant,
+        dueAt: task.dueAt,
+      }),
+    });
+    if (res.ok) {
+      fetchTasks();
+      fetchLists();
+    }
+  };
+
+  const deleteList = async (id: string) => {
+    await fetch(`/api/tasks/lists/${id}`, { method: "DELETE" });
+    if (selectedListId === id) setSelectedListId(null);
+    fetchLists();
+    fetchTasks();
+  };
+
+  const copyListName = (list: TaskList) => {
+    navigator.clipboard.writeText(list.name);
+  };
+
+  const reorderLists = async (draggedId: string, targetId: string, position: "before" | "after") => {
+    if (draggedId === targetId) return;
+    const ordered = lists.map((l) => l.id);
+    const fromIdx = ordered.indexOf(draggedId);
+    ordered.splice(fromIdx, 1);
+    let toIdx = ordered.indexOf(targetId);
+    if (position === "after") toIdx += 1;
+    ordered.splice(toIdx, 0, draggedId);
+    await Promise.all(
+      ordered.map((id, i) =>
+        fetch(`/api/tasks/lists/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: i }),
+        })
+      )
+    );
+    fetchLists();
+  };
+
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData("text/plain", taskId);
     e.dataTransfer.effectAllowed = "move";
@@ -191,6 +264,45 @@ export default function TasksPage() {
     e.dataTransfer.dropEffect = "move";
   };
 
+  // Reorder: move draggedId before or after targetId within same level
+  const reorderTask = async (draggedId: string, targetId: string, position: "before" | "after") => {
+    if (draggedId === targetId) return;
+    // Find siblings list containing both tasks
+    const findSiblings = (list: Task[]): Task[] | null => {
+      const ids = list.map((t) => t.id);
+      if (ids.includes(draggedId) && ids.includes(targetId)) return list;
+      for (const t of list) {
+        if (t.subtasks?.length) {
+          const found = findSiblings(t.subtasks);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const siblings = findSiblings(tasks);
+    if (!siblings) return;
+
+    // Reorder in memory
+    const ordered = siblings.map((t) => t.id);
+    const fromIdx = ordered.indexOf(draggedId);
+    ordered.splice(fromIdx, 1);
+    let toIdx = ordered.indexOf(targetId);
+    if (position === "after") toIdx += 1;
+    ordered.splice(toIdx, 0, draggedId);
+
+    // Batch update sortOrder
+    await Promise.all(
+      ordered.map((id, i) =>
+        fetch(`/api/tasks/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: i }),
+        })
+      )
+    );
+    fetchTasks();
+  };
+
   const allTaskCount = tasks.length;
 
   return (
@@ -201,7 +313,14 @@ export default function TasksPage() {
           <h2 className="text-sm font-semibold text-text-primary">清单</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-1">
+        <div
+          className="flex-1 overflow-y-auto py-1"
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setListDropTarget(null);
+            }
+          }}
+        >
           <button
             onClick={() => setSelectedListId(null)}
             className={`flex w-full items-center justify-between px-3 py-2 text-sm transition-colors ${
@@ -218,26 +337,117 @@ export default function TasksPage() {
           </button>
 
           {lists.map((list) => (
-            <button
-              key={list.id}
-              onClick={() => setSelectedListId(list.id)}
-              className={`flex w-full items-center justify-between px-3 py-2 text-sm transition-colors ${
-                selectedListId === list.id
-                  ? "bg-primary-light text-primary font-medium"
-                  : "text-text-secondary hover:bg-surface-secondary"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: list.color }}
-                />
-                <span>{list.name}</span>
+            <div key={list.id} className="relative">
+              {/* Drop indicator before */}
+              {listDropTarget?.id === list.id && listDropTarget.position === "before" && (
+                <div className="h-0.5 bg-primary rounded mx-2" />
+              )}
+              <div
+                className={`group flex w-full items-center justify-between px-1 py-2 text-sm transition-colors cursor-pointer ${
+                  selectedListId === list.id
+                    ? "bg-primary-light text-primary font-medium"
+                    : "text-text-secondary hover:bg-surface-secondary"
+                }`}
+                onClick={() => setSelectedListId(list.id)}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("list-id", list.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  setListDragId(list.id);
+                }}
+                onDragEnd={() => {
+                  setListDragId(null);
+                  setListDropTarget(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!e.dataTransfer.types.includes("list-id")) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const midY = rect.top + rect.height / 2;
+                  setListDropTarget({ id: list.id, position: e.clientY < midY ? "before" : "after" });
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const draggedId = e.dataTransfer.getData("list-id");
+                  if (draggedId && draggedId !== list.id) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    reorderLists(draggedId, list.id, e.clientY < midY ? "before" : "after");
+                  }
+                  setListDropTarget(null);
+                  setListDragId(null);
+                }}
+              >
+                {/* Drag handle */}
+                <div className={`flex-shrink-0 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-text-muted transition-opacity ${listDragId === list.id ? "opacity-100" : ""}`}>
+                  <GripVertical className="h-3.5 w-3.5" />
+                </div>
+                <div className="flex items-center gap-2 flex-1 min-w-0 px-1">
+                  <div
+                    className="h-3 w-3 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: list.color }}
+                  />
+                  <span className="truncate">{list.name}</span>
+                </div>
+                <span className="text-xs text-text-muted mr-1">
+                  {list._count?.tasks ?? 0}
+                </span>
+                {/* More menu */}
+                <div className="relative flex-shrink-0" ref={listMenuId === list.id ? listMenuRef : undefined}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setListMenuId(listMenuId === list.id ? null : list.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-text-primary transition-opacity p-0.5 rounded hover:bg-surface-secondary"
+                  >
+                    <MoreVertical className="h-3.5 w-3.5" />
+                  </button>
+                  {listMenuId === list.id && (
+                    <div className="absolute right-0 top-full mt-1 z-50 w-32 rounded-sm border border-border bg-surface shadow-lg py-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setListMenuId(null);
+                          setListDetailId(list.id);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-secondary"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        查看
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setListMenuId(null);
+                          copyListName(list);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-secondary"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        复制
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setListMenuId(null);
+                          deleteList(list.id);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        删除
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <span className="text-xs text-text-muted">
-                {list._count?.tasks ?? 0}
-              </span>
-            </button>
+              {/* Drop indicator after */}
+              {listDropTarget?.id === list.id && listDropTarget.position === "after" && (
+                <div className="h-0.5 bg-primary rounded mx-2" />
+              )}
+            </div>
           ))}
         </div>
 
@@ -325,6 +535,8 @@ export default function TasksPage() {
               onCreateSubtask={(parentId) => createTask(parentId)}
               onUpdateTask={updateTask}
               onDeleteTask={deleteTask}
+              onDuplicateTask={duplicateTask}
+              onReorder={reorderTask}
             />
           ) : (
             <QuadrantView
@@ -370,6 +582,15 @@ export default function TasksPage() {
           onToggle={toggleComplete}
         />
       )}
+
+      {/* List Detail Modal */}
+      {listDetailId && (
+        <ListDetailModal
+          listId={listDetailId}
+          listName={lists.find((l) => l.id === listDetailId)?.name ?? ""}
+          onClose={() => setListDetailId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -384,6 +605,8 @@ function ListView({
   onCreateSubtask,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
+  onReorder,
 }: {
   tasks: Task[];
   selectedTask: Task | null;
@@ -393,7 +616,11 @@ function ListView({
   onCreateSubtask: (parentId: string) => void;
   onUpdateTask: (id: string, data: Record<string, unknown>) => void;
   onDeleteTask: (id: string) => void;
+  onDuplicateTask: (task: Task) => void;
+  onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
 }) {
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-text-muted">
@@ -404,7 +631,12 @@ function ListView({
   }
 
   return (
-    <div className="space-y-0.5">
+    <div
+      className="space-y-0.5"
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={() => setDropTarget(null)}
+      onDrop={() => setDropTarget(null)}
+    >
       {tasks.map((task) => (
         <TaskRow
           key={task.id}
@@ -417,6 +649,10 @@ function ListView({
           onCreateSubtask={onCreateSubtask}
           onUpdateTask={onUpdateTask}
           onDeleteTask={onDeleteTask}
+          onDuplicateTask={onDuplicateTask}
+          onReorder={onReorder}
+          dropTarget={dropTarget}
+          setDropTarget={setDropTarget}
         />
       ))}
     </div>
@@ -434,6 +670,10 @@ function TaskRow({
   onCreateSubtask,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
+  onReorder,
+  dropTarget,
+  setDropTarget,
 }: {
   task: Task;
   depth: number;
@@ -444,13 +684,31 @@ function TaskRow({
   onCreateSubtask: (parentId: string) => void;
   onUpdateTask: (id: string, data: Record<string, unknown>) => void;
   onDeleteTask: (id: string) => void;
+  onDuplicateTask: (task: Task) => void;
+  onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
+  dropTarget: { id: string; position: "before" | "after" } | null;
+  setDropTarget: (v: { id: string; position: "before" | "after" } | null) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [showSubInput, setShowSubInput] = useState(false);
   const [subTitle, setSubTitle] = useState("");
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const meta = QUADRANT_META[task.quadrant];
   const hasSubtasks = task.subtasks && task.subtasks.length > 0;
   const isSelected = selectedTask?.id === task.id;
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMenu]);
 
   const handleCreateSub = async () => {
     if (!subTitle.trim()) return;
@@ -461,6 +719,7 @@ function TaskRow({
         title: subTitle.trim(),
         parentId: task.id,
         listId: task.listId,
+        quadrant: task.quadrant,
       }),
     });
     if (res.ok) {
@@ -470,19 +729,63 @@ function TaskRow({
     }
   };
 
+  const isDropBefore = dropTarget?.id === task.id && dropTarget.position === "before";
+  const isDropAfter = dropTarget?.id === task.id && dropTarget.position === "after";
+
   return (
     <div>
+      {/* Drop indicator — before */}
+      {isDropBefore && (
+        <div className="h-0.5 bg-primary rounded mx-2" />
+      )}
       <div
-        draggable={depth === 0}
-        onDragStart={(e) => depth === 0 && onDragStart(e, task.id)}
         onClick={() => onSelect(task)}
-        className={`group flex items-center gap-2 rounded-sm px-3 py-2 cursor-pointer transition-colors ${
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          const pos = e.clientY < midY ? "before" : "after";
+          setDropTarget({ id: task.id, position: pos });
+        }}
+        onDragLeave={(e) => {
+          // Only clear if leaving the element entirely
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setDropTarget(null);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const draggedId = e.dataTransfer.getData("text/plain");
+          if (draggedId && draggedId !== task.id) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            const pos = e.clientY < midY ? "before" : "after";
+            onReorder(draggedId, task.id, pos);
+          }
+          setDropTarget(null);
+        }}
+        className={`group flex items-center gap-1.5 rounded-sm py-2 pr-2 cursor-pointer transition-colors ${
           isSelected
             ? "bg-primary-light border border-primary/20"
             : "bg-surface border border-transparent hover:bg-surface-secondary"
         }`}
-        style={{ paddingLeft: `${12 + depth * 24}px` }}
+        style={{ paddingLeft: `${4 + depth * 24}px` }}
       >
+        {/* Drag handle — visible on hover */}
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            onDragStart(e, task.id);
+          }}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-text-muted hover:text-text-secondary transition-opacity"
+          title="拖拽排序"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+
         {/* Expand/collapse toggle */}
         <button
           onClick={(e) => {
@@ -560,21 +863,67 @@ function TaskRow({
           </span>
         )}
 
-        {/* Add subtask button (max 3 levels: depth 0, 1, 2) */}
-        {depth < 2 && (
+        {/* More actions menu */}
+        <div className="relative flex-shrink-0" ref={menuRef}>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setShowSubInput(true);
-              setExpanded(true);
+              setShowMenu(!showMenu);
             }}
-            className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-text-muted hover:text-primary transition-all"
-            title="添加子任务"
+            className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-text-primary transition-opacity p-0.5 rounded hover:bg-surface-secondary"
+            title="更多操作"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <MoreVertical className="h-4 w-4" />
           </button>
-        )}
+
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-sm border border-border bg-surface shadow-lg py-1">
+              {depth < 2 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu(false);
+                    setShowSubInput(true);
+                    setExpanded(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-secondary transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  添加子任务
+                </button>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                  onDuplicateTask(task);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-text-primary hover:bg-surface-secondary transition-colors"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                创建副本
+              </button>
+              <div className="my-1 border-t border-border" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                  onDeleteTask(task.id);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                删除
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Drop indicator — after */}
+      {isDropAfter && !hasSubtasks && (
+        <div className="h-0.5 bg-primary rounded mx-2" />
+      )}
 
       {/* Expanded subtasks */}
       {expanded && hasSubtasks && (
@@ -591,9 +940,18 @@ function TaskRow({
               onCreateSubtask={onCreateSubtask}
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
+              onDuplicateTask={onDuplicateTask}
+              onReorder={onReorder}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
             />
           ))}
         </div>
+      )}
+
+      {/* Drop indicator — after (with subtasks) */}
+      {isDropAfter && hasSubtasks && (
+        <div className="h-0.5 bg-primary rounded mx-2" />
       )}
 
       {/* Inline subtask input */}
@@ -781,6 +1139,7 @@ function TaskDetail({
         title: subTitle.trim(),
         parentId: task.id,
         listId: task.listId,
+        quadrant: task.quadrant,
       }),
     });
     if (res.ok) {
@@ -831,7 +1190,7 @@ function TaskDetail({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col">
         {/* Title */}
         <input
           value={title}
@@ -839,11 +1198,11 @@ function TaskDetail({
             setTitle(e.target.value);
             saveTitle(e.target.value);
           }}
-          className="w-full text-base font-medium text-text-primary bg-transparent border-none outline-none focus:ring-0"
+          className="w-full text-base font-medium text-text-primary bg-transparent border-none outline-none focus:ring-0 mb-4"
         />
 
         {/* Quadrant selector */}
-        <div>
+        <div className="mb-4">
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
             象限
           </label>
@@ -868,7 +1227,7 @@ function TaskDetail({
         </div>
 
         {/* 所属清单 */}
-        <div>
+        <div className="mb-4">
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
             所属清单
           </label>
@@ -889,7 +1248,7 @@ function TaskDetail({
         </div>
 
         {/* Due date */}
-        <div>
+        <div className="mb-4">
           <label className="text-xs font-medium text-text-muted mb-1.5 block">
             截止日期
           </label>
@@ -903,8 +1262,29 @@ function TaskDetail({
           />
         </div>
 
+        {/* Duration (完成用时) */}
+        <div className="mb-4">
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">
+            完成用时（分钟）
+          </label>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-text-muted flex-shrink-0" />
+            <input
+              type="number"
+              min="0"
+              placeholder="填写用时"
+              value={task.duration ?? ""}
+              onChange={(e) => {
+                const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                onUpdate(task.id, { duration: val });
+              }}
+              className="flex-1 rounded-sm border border-border bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+            />
+          </div>
+        </div>
+
         {/* Subtasks (recursive, up to 3 levels) */}
-        <div>
+        <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-text-muted">
               子任务
@@ -930,6 +1310,7 @@ function TaskDetail({
               onDelete={onDelete}
               onCreateSubtask={onCreateSubtask}
               taskListId={task.listId}
+              taskQuadrant={task.quadrant}
             />
           )}
 
@@ -960,8 +1341,8 @@ function TaskDetail({
         </div>
 
         {/* Description — live Markdown editor (Tiptap) */}
-        <div className="flex-1">
-          <label className="text-xs font-medium text-text-muted mb-1.5 block">
+        <div className="flex-1 flex flex-col min-h-0 mb-2">
+          <label className="text-xs font-medium text-text-muted mb-1.5 block flex-shrink-0">
             描述
           </label>
           <MarkdownEditor
@@ -969,6 +1350,7 @@ function TaskDetail({
             content={task.description || ""}
             onChange={saveDesc}
             placeholder="添加描述..."
+            className="flex-1"
           />
         </div>
       </div>
@@ -995,6 +1377,7 @@ function DetailSubtaskList({
   onDelete,
   onCreateSubtask,
   taskListId,
+  taskQuadrant,
 }: {
   subtasks: Task[];
   depth: number;
@@ -1002,6 +1385,7 @@ function DetailSubtaskList({
   onDelete: (id: string) => void;
   onCreateSubtask: (parentId: string) => void;
   taskListId: string | null;
+  taskQuadrant: Quadrant;
 }) {
   return (
     <div className="space-y-0.5 mb-2">
@@ -1014,8 +1398,113 @@ function DetailSubtaskList({
           onDelete={onDelete}
           onCreateSubtask={onCreateSubtask}
           taskListId={taskListId}
+          taskQuadrant={taskQuadrant}
         />
       ))}
+    </div>
+  );
+}
+
+/* ---------- List Detail Modal ---------- */
+function ListDetailModal({
+  listId,
+  listName,
+  onClose,
+}: {
+  listId: string;
+  listName: string;
+  onClose: () => void;
+}) {
+  const [stats, setStats] = useState<{
+    totalTasks: number;
+    completedTasks: number;
+    totalDuration: number;
+    createdAt: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch(`/api/tasks/lists/${listId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setStats({
+          totalTasks: data.stats.totalTasks,
+          completedTasks: data.stats.completedTasks,
+          totalDuration: data.stats.totalDuration,
+          createdAt: data.createdAt,
+        });
+      }
+      setLoading(false);
+    })();
+  }, [listId]);
+
+  const formatDuration = (minutes: number) => {
+    if (minutes < 60) return `${minutes} 分钟`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h} 小时 ${m} 分钟` : `${h} 小时`;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-surface rounded-lg border border-border shadow-xl w-[380px] max-w-[90vw]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="text-base font-semibold text-text-primary">{listName}</h3>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          {loading ? (
+            <p className="text-sm text-text-muted text-center py-6">加载中...</p>
+          ) : stats ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">创建日期</span>
+                <span className="text-sm text-text-primary">
+                  {new Date(stats.createdAt).toLocaleDateString("zh-CN")}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">任务总数</span>
+                <span className="text-sm text-text-primary font-medium">{stats.totalTasks}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">已完成</span>
+                <span className="text-sm text-green-600 font-medium">{stats.completedTasks}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">完成率</span>
+                <span className="text-sm text-text-primary font-medium">
+                  {stats.totalTasks > 0
+                    ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
+                    : 0}%
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">累计用时</span>
+                <span className="text-sm text-text-primary font-medium">
+                  {stats.totalDuration > 0 ? formatDuration(stats.totalDuration) : "暂无记录"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-text-muted text-center py-6">加载失败</p>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-border flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-sm bg-primary px-4 py-1.5 text-sm text-white hover:bg-primary-hover"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1027,6 +1516,7 @@ function DetailSubtaskItem({
   onDelete,
   onCreateSubtask,
   taskListId,
+  taskQuadrant,
 }: {
   sub: Task;
   depth: number;
@@ -1034,6 +1524,7 @@ function DetailSubtaskItem({
   onDelete: (id: string) => void;
   onCreateSubtask: (parentId: string) => void;
   taskListId: string | null;
+  taskQuadrant: Quadrant;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [showInput, setShowInput] = useState(false);
@@ -1050,6 +1541,7 @@ function DetailSubtaskItem({
         title: title.trim(),
         parentId: sub.id,
         listId: taskListId,
+        quadrant: taskQuadrant,
       }),
     });
     if (res.ok) {
@@ -1139,6 +1631,7 @@ function DetailSubtaskItem({
           onDelete={onDelete}
           onCreateSubtask={onCreateSubtask}
           taskListId={taskListId}
+          taskQuadrant={taskQuadrant}
         />
       )}
 
