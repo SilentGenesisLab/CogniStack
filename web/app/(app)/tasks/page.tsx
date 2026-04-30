@@ -52,6 +52,16 @@ type Quadrant =
 
 type ViewMode = "list" | "quadrant";
 
+function toLocalDateTimeInputValue(value: string | null) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 const QUADRANT_META: Record<
   Quadrant,
   { label: string; color: string; bg: string; border: string }
@@ -1304,7 +1314,7 @@ function TaskDetail({
           </label>
           <input
             type="datetime-local"
-            value={task.startAt ? task.startAt.slice(0, 16) : ""}
+            value={toLocalDateTimeInputValue(task.startAt)}
             onChange={(e) =>
               onUpdate(task.id, { startAt: e.target.value || null })
             }
